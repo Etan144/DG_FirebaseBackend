@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /calls/{callId} {
+
+      // Allow the caller to create the call document
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.caller_user_id;
+
+      // Allow caller or callee to read/update/delete
+      allow read, update, delete: if request.auth != null
+        && (request.auth.uid == resource.data.caller_user_id
+            || request.auth.uid == resource.data.callee_user_id);
+    }
+  }
+}
+
+
