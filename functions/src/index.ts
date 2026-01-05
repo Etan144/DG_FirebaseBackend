@@ -11,7 +11,7 @@ import {setGlobalOptions} from "firebase-functions";
 // import {onRequest} from "firebase-functions/https";
 // import * as logger from "firebase-functions/logger";
 
-export { createUserProfile } from "./auth";
+export { registerUser } from "./auth";
 
 
 // Start writing functions

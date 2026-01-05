@@ -101,12 +101,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import {
-      getAuth,
-      createUserWithEmailAndPassword,
-      sendEmailVerification,
-      updateProfile
-    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import {getFunctions, httpsCallable} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
@@ -123,62 +118,53 @@
     const auth = getAuth(app);
 
     // expose helpers globally
-    window.auth = auth;
-    window.firebaseRegister = createUserWithEmailAndPassword;
-    window.sendVerification = sendEmailVerification;
-    window.updateProfile = updateProfile;
+    window.registerUser = httpsCallable(functions, "registerUser");
   </script>
 
   <script type="module">
-    const form = document.getElementById("register-form");
-    const feedback = document.getElementById("feedback-message");
+  const form = document.getElementById("register-form");
+  const feedback = document.getElementById("feedback-message");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-      const username = document.getElementById("username").value.trim();
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
-      const confirm = document.getElementById("confirm-password").value;
+    const username = document.getElementById("username").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const confirm = document.getElementById("confirm-password").value;
 
-      if (password !== confirm) {
-        feedback.textContent = "Passwords do not match";
-        feedback.style.color = "red";
-        return;
-      }
+    if (password !== confirm) {
+      feedback.textContent = "Passwords do not match";
+      feedback.style.color = "red";
+      return;
+    }
 
-      feedback.textContent = "Creating account...";
-      feedback.style.color = "var(--muted)";
+    feedback.textContent = "Creating account...";
+    feedback.style.color = "var(--muted)";
 
-      try {
-        const cred = await window.firebaseRegister(
-          window.auth,
-          email,
-          password
-        );
+    try {
+      await window.registerUser({
+        email,
+        password,
+        username
+      });
 
-        // set username as displayName
-        await window.updateProfile(cred.user, {
-          displayName: username
-        });
+      feedback.textContent =
+        "Account created! Please verify your email before logging in.";
+      feedback.style.color = "var(--accent)";
 
-        // send verification email
-        await window.sendVerification(cred.user);
+      setTimeout(() => {
+        window.location.href = "LoginPage.html";
+      }, 2000);
 
-        feedback.textContent =
-          "Account created! Please verify your email before logging in.";
-        feedback.style.color = "var(--accent)";
+    } catch (err) {
+      feedback.textContent = err.message || "Registration failed";
+      feedback.style.color = "red";
+    }
+  });
+</script>
 
-        setTimeout(() => {
-          window.location.href = "LoginPage.html";
-        }, 2000);
 
-      } catch (err) {
-        feedback.textContent = err.message;
-        feedback.style.color = "red";
-      }
-    });
-  </script>
 
 
 
