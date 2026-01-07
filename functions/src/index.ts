@@ -10,7 +10,7 @@
 // import {onRequest} from "firebase-functions/https";
 // import * as logger from "firebase-functions/logger";
 
-export {registerUser} from "./auth";
+export {checkUsernameAvailable, claimUsername} from "./auth";
 
 
 // Start writing functions

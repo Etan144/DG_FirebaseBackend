@@ -1,38 +1,71 @@
 import * as functions from "firebase-functions/v1";
 import {initializeApp} from "firebase-admin/app";
-import {getAuth} from "firebase-admin/auth";
 import {getFirestore} from "firebase-admin/firestore";
-import type {UserRecord} from "firebase-admin/auth";
 
 initializeApp();
-
-const auth = getAuth();
 const db = getFirestore();
 
 /**
- * Cloud Function: registerUser
- * - Enforces username uniqueness
- * - Creates Firebase Auth user
- * - Creates Firestore user profile
- * - Safe against race conditions
+ * Check if a username is available (NO reservation)
  */
-export const registerUser = functions.https.onCall(
-  async (data, _context) => {const {email, password, username, displayName} = data;
+export const checkUsernameAvailable = functions.https.onCall(
+  async (data) => {
+    const {username} = data ?? {};
 
-    // Validate input
-    if (!email || !password || !username) {
+    if (typeof username !== "string") {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Email, password, and username are required"
+        "Username is required"
       );
     }
 
-    const normalizedUsername = username.toLowerCase().trim();
-    const usernameRef = db.collection("usernames").doc(normalizedUsername);
+    const normalized = username.toLowerCase().trim();
 
-    // Reserve username (Firestore-only transaction)
+    if (normalized.length < 3) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Username must be at least 3 characters long"
+      );
+    }
+
+    const ref = db.collection("usernames").doc(normalized);
+    const snap = await ref.get();
+
+    return {
+      available: !snap.exists,
+    };
+  }
+);
+
+/**
+ * Claim username AFTER email verification
+ */
+export const claimUsername = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Login required"
+      );
+    }
+
+    const {username} = data ?? {};
+    const uid = context.auth.uid;
+
+    if (typeof username !== "string") {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Username is required"
+      );
+    }
+
+    const normalized = username.toLowerCase().trim();
+    const usernameRef = db.collection("usernames").doc(normalized);
+    const userRef = db.collection("users").doc(uid);
+
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(usernameRef);
+
       if (snap.exists) {
         throw new functions.https.HttpsError(
           "already-exists",
@@ -40,44 +73,18 @@ export const registerUser = functions.https.onCall(
         );
       }
 
-      // Temporary reservation
-      tx.set(usernameRef, {reserved: true});
-    });
-
-    // Create Firebase Auth user
-    let user : UserRecord;
-    try {
-      user = await auth.createUser({
-        email,
-        password,
-        displayName: displayName || normalizedUsername,
-      });
-    } catch (error) {
-      // Roll back username reservation if Auth creation fails
-      await usernameRef.delete();
-      throw error;
-    }
-
-    // Finalize Firestore records
-    await db.runTransaction(async (tx) => {
-      // Bind username → uid
-      tx.set(usernameRef, {uid: user.uid});
-
-      // Create user profile
-      tx.set(db.collection("users").doc(user.uid), {
-        email,
-        username: normalizedUsername,
-        displayName: displayName || normalizedUsername,
+      tx.set(usernameRef, {uid});
+      tx.set(userRef, {
+        username: normalized,
         role: "REGISTERED",
         planTier: "FREE",
-        verified: false,
         createdAtSeconds: Math.floor(Date.now() / 1000),
-      });
+      }, {merge: true});
     });
 
     return {
-      uid: user.uid,
-      message: "User registered successfully",
+      success: true,
+      username: normalized,
     };
   }
 );
