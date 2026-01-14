@@ -4,162 +4,246 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register | Deepfake Guard</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
   <link rel="stylesheet" href="style.css">
 
-  <style>
-    .form-container {
-      width: 400px;
-      margin: 0 auto;
-      text-align: left;
-    }
-    .form-container h1 {
-      text-align: center;
-    }
-    .form-group {
-      margin-bottom: 16px;
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      color: var(--muted);
-    }
-    .form-group input {
-      width: 100%;
-      padding: 10px;
-      border-radius: 4px;
-      border: 1px solid #2c3e50;
-      background: #03101a;
-      color: white;
-      box-sizing: border-box; /* Ensures padding doesn't affect width */
-    }
-    .feedback {
-      margin-top: 16px;
-      text-align: center;
-    }
-  </style>
 </head>
+
 <body>
   <div class="page">
     <header>
-      <a href="index.html" class="brand" style="text-decoration: none; color: inherit;">
+      <a href="index.html" class="brand" style="text-decoration:none;color:inherit;">
         <div class="logo">DG</div>
         <div>
-          <div style="font-weight:700; letter-spacing:-0.02em;">Deepfake Guard</div>
-          <div style="color:var(--muted); font-size:12px;">Deepfake call protection</div>
+          <div style="font-weight:700;">Deepfake Guard</div>
+          <div style="color:var(--muted);font-size:12px;">
+            Deepfake call protection
+          </div>
         </div>
       </a>
-      <nav>
-        <a href="index.html#product">Product</a>
-        <a href="index.html#features">Features</a>
-        <a href="index.html#how">How it works</a>
-        <a href="index.html#faq">FAQ</a>
-      </nav>
-      <div class="cta">
-        <a class="btn primary" href="LoginPage.html">Login</a>
-      </div>
     </header>
 
     <section class="hero">
-        <div class="form-container">
-            <h1>Create Account</h1>
-            
-            <!-- Registration Form -->
-            <form id="register-form" style="display: block;">
-              <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required>
-              </div>
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" name="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
-                    <small style="color: var(--muted); display: block; margin-top: 4px;">
-                      Password must contain: uppercase, lowercase, number, and special character (!@#$%^&*)
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label for="confirm-password">Confirm Password</label>
-                    <input type="password" id="confirm-password" name="confirm-password" required>
-                </div>
-                <button type="submit" class="btn primary" style="width:100%;">Register</button>
-            </form>
+      <div class="form-container">
+        <h1>Create Account</h1>
 
-            <div id="feedback-message" class="feedback"></div>
-        </div>
+        <form id="register-form">
+          <!-- Username -->
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input id="username" required>
+            <div id="username-hint" class="hint"></div>
+          </div>
+
+          <!-- Email -->
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" required>
+          </div>
+
+          <!-- Password -->
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" required>
+
+            <div class="strength-bar">
+              <div id="strength-fill" class="strength-bar-fill"></div>
+            </div>
+
+            <ul id="password-rules">
+              <li id="rule-length"> At least 8 characters</li>
+              <li id="rule-upper"> One uppercase letter</li>
+              <li id="rule-lower"> One lowercase letter</li>
+              <li id="rule-number"> One number</li>
+              <li id="rule-special"> One special character</li>
+            </ul>
+          </div>
+
+          <!-- Confirm -->
+          <div class="form-group">
+            <label for="confirm">Confirm Password</label>
+            <input type="password" id="confirm" required>
+          </div>
+
+          <button type="submit" class="btn primary" style="width:100%;">
+            Register
+          </button>
+        </form>
+
+        <div id="feedback" class="feedback"></div>
+      </div>
     </section>
-
-    <footer>
-      &copy; 2024 Deepfake Guard. All rights reserved.
-    </footer>
   </div>
 
+  <!-- Firebase Logic -->
   <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
+    import { initializeApp } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      sendEmailVerification
+    } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import {
+      getFunctions,
+      httpsCallable
+    } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
-    authDomain: "fyp-deepfakeguard.firebaseapp.com",
-    projectId: "fyp-deepfakeguard"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
+      authDomain: "fyp-deepfakeguard.firebaseapp.com",
+      projectId: "fyp-deepfakeguard"
+    };
 
-  const app = initializeApp(firebaseConfig);
-  const functions = getFunctions(app);
-  const registerUser = httpsCallable(functions, "registerUser");
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const functions = getFunctions(app);
+    const checkUsername =
+      httpsCallable(functions, "checkUsernameAvailable");
 
-  const form = document.getElementById("register-form");
-  const feedback = document.getElementById("feedback-message");
+    const usernameInput = document.getElementById("username");
+    const usernameHint = document.getElementById("username-hint");
+    const passwordInput = document.getElementById("password");
+    const strengthFill = document.getElementById("strength-fill");
+    const feedback = document.getElementById("feedback");
+    const form = document.getElementById("register-form");
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+    let usernameAvailable = false;
+    let debounceTimer;
 
-    const username = document.getElementById("username").value.trim();
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
-    const confirm = document.getElementById("confirm-password").value;
-
-    if (password !== confirm) {
-      feedback.textContent = "Passwords do not match";
-      feedback.style.color = "red";
-      return;
+    function isPasswordStrong(password) {
+      return (
+        password.length >= 8 &&
+        /[A-Z]/.test(password) &&
+        /[a-z]/.test(password) &&
+        /[0-9]/.test(password) &&
+        /[^A-Za-z0-9]/.test(password)
+      );
     }
 
-    feedback.textContent = "Creating account...";
-    feedback.style.color = "var(--muted)";
+    /* 🔹 LIVE USERNAME CHECK */
+    usernameInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      usernameHint.textContent = "Checking...";
+      usernameHint.className = "hint";
 
-    try {
-      await registerUser({
-        email,
-        password,
-        username,
-        displayName: username
+      debounceTimer = setTimeout(async () => {
+        const username = usernameInput.value.trim();
+
+        if (username.length < 3) {
+          usernameHint.textContent = "At least 3 characters";
+          usernameHint.className = "hint error";
+          usernameAvailable = false;
+          return;
+        }
+
+        try {
+          const res = await checkUsername({username});
+          if (res.data.available) {
+            usernameHint.textContent = "Username available";
+            usernameHint.className = "hint ok";
+            usernameAvailable = true;
+          } else {
+            usernameHint.textContent = "Username already taken";
+            usernameHint.className = "hint error";
+            usernameAvailable = false;
+          }
+        } catch {
+          usernameHint.textContent = "Unable to check username";
+          usernameHint.className = "hint error";
+          usernameAvailable = false;
+        }
+      }, 400);
+    });
+
+    /* 🔹 PASSWORD CHECKLIST + METER */
+    passwordInput.addEventListener("input", () => {
+      const val = passwordInput.value;
+
+      const rules = {
+        length: val.length >= 8,
+        upper: /[A-Z]/.test(val),
+        lower: /[a-z]/.test(val),
+        number: /[0-9]/.test(val),
+        special: /[^A-Za-z0-9]/.test(val),
+      };
+
+      Object.entries(rules).forEach(([key, ok]) => {
+        document.getElementById(`rule-${key}`)
+          .classList.toggle("ok", ok);
       });
 
-      feedback.textContent =
-        "Account created! Please verify your email before logging in.";
-      feedback.style.color = "var(--accent)";
+      const score = Object.values(rules).filter(Boolean).length;
+      strengthFill.style.width = "0%";
+      strengthFill.classList.remove("weak", "medium", "strong");
 
-      setTimeout(() => {
-        window.location.href = "LoginPage.html";
-      }, 2000);
+      if (score <= 2) {
+        strengthFill.style.width = "25%";
+        strengthFill.classList.add("weak");
+      } else if (score <= 4) {
+        strengthFill.style.width = "60%";
+        strengthFill.classList.add("medium");
+      } else {
+        strengthFill.style.width = "100%";
+        strengthFill.classList.add("strong");
+      }
+    });
 
-    } catch (err) {
-      feedback.textContent = err.message || "Registration failed";
-      feedback.style.color = "red";
-    }
-  });
-</script>
+    /* 🔹 SUBMIT WITH ENFORCEMENT */
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
 
+      const email = document.getElementById("email").value.trim();
+      const password = passwordInput.value;
+      const confirm = document.getElementById("confirm").value;
 
+      if (!usernameAvailable) {
+        feedback.textContent = "Please choose an available username.";
+        feedback.style.color = "red";
+        return;
+      }
 
+      if (!isPasswordStrong(password)) {
+        feedback.textContent =
+          "Password does not meet all requirements.";
+        feedback.style.color = "red";
+        return;
+      }
 
+      if (password !== confirm) {
+        feedback.textContent = "Passwords do not match.";
+        feedback.style.color = "red";
+        return;
+      }
 
+      try {
+        const cred =
+          await createUserWithEmailAndPassword(auth, email, password);
 
+        await sendEmailVerification(cred.user);
+        localStorage.setItem("pendingUsername", usernameInput.value.trim());
+
+        feedback.textContent =
+          "Account created! Verify your email, then log in.";
+        feedback.style.color = "var(--accent)";
+
+        setTimeout(() => {
+          window.location.href = "LoginPage.html";
+        }, 3000);
+
+      } catch {
+        feedback.textContent = "Registration failed.";
+        feedback.style.color = "red";
+      }
+    });
+  </script>
 </body>
 </html>

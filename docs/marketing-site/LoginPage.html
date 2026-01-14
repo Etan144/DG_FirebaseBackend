@@ -4,108 +4,47 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login | Deepfake Guard</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-
-
-
-  <style>
-    .form-container {
-      width: 400px;
-      margin: 50px auto 0;
-      text-align: left;
-      background: rgba(15, 31, 55, 0.5);
-      padding: 40px;
-      border-radius: 8px;
-      border: 1px solid rgba(52, 152, 219, 0.2);
-    }
-    .form-container h2 {
-      text-align: center;
-      margin-bottom: 30px;
-      color: var(--accent);
-    }
-    .form-group {
-      margin-bottom: 20px;
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-    .form-group input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 4px;
-      border: 1px solid #2c3e50;
-      background: #03101a;
-      color: white;
-      box-sizing: border-box;
-      font-family: inherit;
-    }
-    .form-group input:focus {
-      outline: none;
-      border-color: var(--accent);
-      background: rgba(15, 31, 55, 0.8);
-    }
-    .feedback {
-      margin-top: 16px;
-      text-align: center;
-      min-height: 20px;
-      font-size: 14px;
-    }
-    .form-links {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 14px;
-    }
-    .form-links a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-    .form-links a:hover {
-      text-decoration: underline;
-    }
-  </style>
+  
 </head>
+
 <body>
   <div class="page">
     <header>
-      <a href="index.html" class="brand" style="text-decoration: none; color: inherit;">
+      <a href="index.html" class="brand" style="text-decoration:none;color:inherit;">
         <div class="logo">DG</div>
         <div>
-          <div style="font-weight:700; letter-spacing:-0.02em;">Deepfake Guard</div>
-          <div style="color:var(--muted); font-size:12px;">Deepfake call protection</div>
+          <div style="font-weight:700;">Deepfake Guard</div>
+          <div style="color:var(--muted);font-size:12px;">Deepfake call protection</div>
         </div>
       </a>
-      <nav>
-        <a href="index.html#product">Product</a>
-        <a href="index.html#features">Features</a>
-        <a href="index.html#how">How it works</a>
-        <a href="index.html#faq">FAQ</a>
-      </nav>
-      <div class="cta">
-      </div>
     </header>
 
     <div class="form-container">
       <h2>Login to Your Account</h2>
+
       <form id="login-form">
         <div class="form-group">
-            <label for="email">Email</label>
-            <input type="text" id="email" name="email" required>
+          <label for="email">Email</label>
+          <input type="email" id="email" required>
         </div>
+
         <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
+          <label for="password">Password</label>
+          <input type="password" id="password" required>
         </div>
-        <div class="form-group">
-            <button type="submit" class="btn primary" style="width: 100%;">Login</button>
-        </div>
+
+        <button type="submit" class="btn primary" style="width:100%;">
+          Login
+        </button>
       </form>
+
       <div id="feedback-message" class="feedback"></div>
+
       <div class="form-links">
         <p>Don't have an account? <a href="RegistrationPage.html">Register here</a></p>
       </div>
@@ -116,9 +55,20 @@
     </footer>
   </div>
 
+  <!-- Firebase logic -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import {getAuth,signInWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import { initializeApp } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword
+    } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import {
+      getFunctions,
+      httpsCallable
+    } from
+      "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
@@ -127,37 +77,46 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    window.auth = getAuth(app);
+    const auth = getAuth(app);
+    const functions = getFunctions(app);
+    const claimUsername = httpsCallable(functions, "claimUsername");
 
-    // expose helpers
-    window.firebaseLogin = signInWithEmailAndPassword;
-  </script>
-
-  <script type="module">
     const form = document.getElementById("login-form");
     const feedback = document.getElementById("feedback-message");
+    const submitBtn = form.querySelector("button");
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const email = document.getElementById("email").value;
+      const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Logging in...";
       feedback.textContent = "Logging in...";
       feedback.style.color = "var(--muted)";
 
       try {
-        // IMPORTANT: Firebase Auth uses EMAIL, not username
-        const cred = await window.firebaseLogin(
-          window.auth,
+        const cred = await signInWithEmailAndPassword(
+          auth,
           email,
           password
         );
 
         if (!cred.user.emailVerified) {
-          feedback.textContent = "Please verify your email before logging in.";
+          feedback.textContent =
+            "Please verify your email before logging in.";
           feedback.style.color = "red";
           return;
+        }
+
+        // 🔑 Finalise registration (claim username if pending)
+        const pendingUsername =
+          localStorage.getItem("pendingUsername");
+
+        if (pendingUsername) {
+          await claimUsername({username: pendingUsername});
+          localStorage.removeItem("pendingUsername");
         }
 
         feedback.textContent = "Login successful!";
@@ -168,12 +127,14 @@
         }, 1000);
 
       } catch (err) {
-        feedback.textContent = err.message;
+        console.error(err);
+        feedback.textContent = "Invalid email or password.";
         feedback.style.color = "red";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Login";
       }
     });
   </script>
-
-
 </body>
 </html>

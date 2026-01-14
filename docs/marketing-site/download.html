@@ -1,80 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Download | Deepfake Guard</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-  <style>
-    .download-container {
-      text-align: center;
-      padding: 50px 20px;
-    }
-    .download-container h1 {
-        font-size: 2.5em;
-        color: var(--accent);
-        margin-bottom: 20px;
-    }
-    .download-container p {
-        font-size: 1.2em;
-        color: var(--muted);
-        margin-bottom: 40px;
-    }
-  </style>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css" />
+
 </head>
-<body style ="display:none">
+
+<body style="display:none">
+
   <div class="page">
+
+    <!-- HEADER -->
     <header>
-      <a href="index.html" class="brand" style="text-decoration: none; color: inherit;">
+      <a href="index.html" class="brand" style="text-decoration:none; color:inherit;">
         <div class="logo">DG</div>
         <div>
-          <div style="font-weight:700; letter-spacing:-0.02em;">Deepfake Guard</div>
-          <div style="color:var(--muted); font-size:12px;">Deepfake call protection</div>
+          <div style="font-weight:700;">Deepfake Guard</div>
+          <div style="color:var(--muted); font-size:12px;">
+            Deepfake call protection
+          </div>
         </div>
       </a>
+
       <nav>
         <a href="index.html#features">Features</a>
         <a href="index.html#how">How it works</a>
       </nav>
+
       <div class="cta">
-        <a class="btn" id="logout-button">Logout</a>
+        <button class="btn" id="logout-button">Logout</button>
       </div>
     </header>
 
+    <!-- MAIN CONTENT -->
     <div class="download-container">
       <h1>Welcome!</h1>
-      <p>You have successfully logged in. Download the Deepfake Guard mobile application to protect your device.</p>
-      <a href="/path/to/your/app.apk" class="btn primary" download>Download Application</a>
+      <p>
+        You are logged in. Download the Deepfake Guard Android application
+        to protect your device from deepfake voice attacks.
+      </p>
+
+      <button id="download-btn" class="btn primary">
+        Download Application
+      </button>
+
+      <!-- INSTALL INSTRUCTIONS -->
+      <div class="install-instructions">
+        <h2>How to Install</h2>
+        <ol>
+          <li>Tap <strong>Download Application</strong> to download the APK file.</li>
+          <li>
+            When prompted, allow your browser to
+            <strong>Install unknown apps</strong>.
+          </li>
+          <li>Open the downloaded file and tap <strong>Install</strong>.</li>
+          <li>Once installed, open <strong>Deepfake Guard</strong> and log in.</li>
+        </ol>
+
+        <p class="note">
+          Note: Android requires permission for apps installed outside the Play Store.
+          This is normal and safe for this application.
+        </p>
+      </div>
     </div>
 
     <footer>
       &copy; 2024 Deepfake Guard. All rights reserved.
     </footer>
+
   </div>
 
+  <!-- FIREBASE LOGIC -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import {
+      getStorage,
+      ref,
+      getDownloadURL
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
       authDomain: "fyp-deepfakeguard.firebaseapp.com",
-      databaseURL: "https://fyp-deepfakeguard-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "fyp-deepfakeguard",
-      storageBucket: "fyp-deepfakeguard.firebasestorage.app",
-      messagingSenderId: "5675548760",
-      appId: "1:5675548760:web:a55e537ee4cff9df4aca2d",
-      measurementId: "G-7QFKWZRZRS"
+      storageBucket: "fyp-deepfakeguard.appspot.com"
     };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const storage = getStorage(app);
 
-    // Auth guard
-    onAuthStateChanged(auth, (user) => {
+    const downloadBtn = document.getElementById("download-btn");
+    const logoutBtn = document.getElementById("logout-button");
+
+    // AUTH GUARD
+    onAuthStateChanged(auth, async (user) => {
       if (!user) {
         window.location.href = "LoginPage.html";
         return;
@@ -82,21 +117,31 @@
 
       if (!user.emailVerified) {
         alert("Please verify your email before downloading the app.");
-        signOut(auth);
+        await signOut(auth);
         window.location.href = "LoginPage.html";
         return;
       }
 
       document.body.style.display = "block";
+
+      downloadBtn.addEventListener("click", async () => {
+        try {
+          const apkRef = ref(storage, "apks/deepfakeguard-v1.0.apk");
+          const downloadUrl = await getDownloadURL(apkRef);
+          window.location.href = downloadUrl;
+        } catch (error) {
+          console.error(error);
+          alert("You are not authorized to download this file.");
+        }
+      });
     });
 
-    // Logout
-    document.getElementById("logout-button").addEventListener("click", async () => {
+    // LOGOUT
+    logoutBtn.addEventListener("click", async () => {
       await signOut(auth);
       window.location.href = "LoginPage.html";
     });
   </script>
-
 
 </body>
 </html>

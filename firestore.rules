@@ -1,20 +1,82 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isParticipant(callId) {
+      let call = get(/databases/$(database)/documents/calls/$(callId)).data;
+      return signedIn()
+        && (
+          request.auth.uid == call.caller_user_id ||
+          request.auth.uid == call.callee_user_id
+        );
+    }
+
+    /* =========================
+       PUBLIC USER DIRECTORY
+       ========================= */
+    match /public_users/{userId} {
+      allow read: if signedIn();
+      allow write: if false; // Cloud Functions only
+    }
+
+    /* =========================
+       USERNAME REGISTRY
+       ========================= */
+    match /usernames/{username} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    /* =========================
+       PRIVATE USER PROFILES
+       ========================= */
+    match /users/{userId} {
+      allow read: if isSelf(userId);
+
+      allow update: if isSelf(userId)
+        && request.resource.data.diff(resource.data).changedKeys()
+             .hasOnly(["displayName"]);
+
+      allow create, delete: if false;
+    }
+
+    /* =========================
+       CALL SIGNALING
+       ========================= */
     match /calls/{callId} {
 
-      // Allow the caller to create the call document
-      allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.caller_user_id;
+      allow create: if signedIn()
+        && (
+          request.auth.uid == request.resource.data.caller_user_id ||
+          request.auth.uid == request.resource.data.callee_user_id
+        );
 
-      // Allow caller or callee to read/update/delete
-      allow read, update, delete: if request.auth != null
-        && (request.auth.uid == resource.data.caller_user_id
-            || request.auth.uid == resource.data.callee_user_id);
+      allow read, update: if isParticipant(callId);
+      allow delete: if false;
+
+      match /ice_candidates/{userId}/candidates/{candidateId} {
+        allow create: if isSelf(userId);
+        allow read: if isParticipant(callId);
+        allow update, delete: if false;
+      }
+    }
+
+    /* =========================
+       DEFAULT DENY
+       ========================= */
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
+
 
 

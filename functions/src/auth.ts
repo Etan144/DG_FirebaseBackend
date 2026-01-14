@@ -6,85 +6,65 @@ initializeApp();
 const db = getFirestore();
 
 /**
- * Check if a username is available (NO reservation)
+ * Check if a username is available
  */
 export const checkUsernameAvailable = functions.https.onCall(
   async (data) => {
     const {username} = data ?? {};
-
     if (typeof username !== "string") {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Username is required"
-      );
+      throw new functions.https.HttpsError("invalid-argument", "Username required");
     }
 
     const normalized = username.toLowerCase().trim();
+    const snap = await db.collection("usernames").doc(normalized).get();
 
-    if (normalized.length < 3) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Username must be at least 3 characters long"
-      );
-    }
-
-    const ref = db.collection("usernames").doc(normalized);
-    const snap = await ref.get();
-
-    return {
-      available: !snap.exists,
-    };
+    return {available: !snap.exists};
   }
 );
 
 /**
- * Claim username AFTER email verification
+ * Claim username AND create user records
  */
 export const claimUsername = functions.https.onCall(
   async (data, context) => {
     if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Login required"
-      );
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
     }
 
-    const {username} = data ?? {};
+    const {username, displayName} = data ?? {};
     const uid = context.auth.uid;
 
     if (typeof username !== "string") {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Username is required"
-      );
+      throw new functions.https.HttpsError("invalid-argument", "Username required");
     }
 
     const normalized = username.toLowerCase().trim();
     const usernameRef = db.collection("usernames").doc(normalized);
     const userRef = db.collection("users").doc(uid);
+    const publicRef = db.collection("public_users").doc(uid);
 
     await db.runTransaction(async (tx) => {
-      const snap = await tx.get(usernameRef);
-
-      if (snap.exists) {
-        throw new functions.https.HttpsError(
-          "already-exists",
-          "Username already taken"
-        );
+      const nameSnap = await tx.get(usernameRef);
+      if (nameSnap.exists) {
+        throw new functions.https.HttpsError("already-exists", "Username taken");
       }
 
       tx.set(usernameRef, {uid});
       tx.set(userRef, {
         username: normalized,
+        displayName: displayName || normalized,
         role: "REGISTERED",
-        planTier: "FREE",
         createdAtSeconds: Math.floor(Date.now() / 1000),
-      }, {merge: true});
+      });
+
+      tx.set(publicRef, {
+        username: normalized,
+        displayName: displayName || normalized,
+        createdAt: Date.now(),
+      });
     });
 
-    return {
-      success: true,
-      username: normalized,
-    };
+    return {success: true};
   }
 );
+
