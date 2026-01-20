@@ -12,7 +12,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-function addCorsHeaders(res: any) {
+/**
+ * Add CORS headers to response
+ * @param {Object} res - Express response object
+ */
+function addCorsHeaders(res: {set: (headers: Record<string, string>) => void}) {
   res.set(corsHeaders);
 }
 
