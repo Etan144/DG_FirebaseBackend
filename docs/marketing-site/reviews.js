@@ -24,6 +24,32 @@ window.auth = auth;
 window.db = db;
 
 /**
+ * Shuffle array using seeded random based on date (same shuffle daily)
+ * @param {Array} array - Array to shuffle
+ * @returns {Array} - Shuffled array
+ */
+function shuffleArrayDaily(array) {
+  // Create a seeded random using today's date
+  const today = new Date();
+  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  
+  // Simple seeded pseudo-random generator
+  let rng = seed;
+  const random = () => {
+    rng = (rng * 9301 + 49297) % 233280;
+    return rng / 233280;
+  };
+  
+  // Fisher-Yates shuffle with seeded random
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
  * Fetch 5-star reviews from Firebase and display them
  */
 async function loadFiveStarReviews() {
@@ -48,8 +74,12 @@ async function loadFiveStarReviews() {
         loadingCard.remove();
       }
 
+      // Shuffle reviews daily and take first 3
+      const shuffledReviews = shuffleArrayDaily(result.reviews);
+      const displayedReviews = shuffledReviews.slice(0, 3);
+
       // Add each review to the slider
-      result.reviews.forEach((review) => {
+      displayedReviews.forEach((review) => {
         const reviewCard = createReviewCard(review);
         reviewSlider.appendChild(reviewCard);
       });
