@@ -5,6 +5,17 @@ import {getFirestore, FieldValue} from "firebase-admin/firestore";
 initializeApp();
 const db = getFirestore();
 
+// Helper function to add CORS headers
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function addCorsHeaders(res: any) {
+  res.set(corsHeaders);
+}
+
 /**
  * Review data structure
  */
@@ -151,12 +162,23 @@ export const getReviewStats = functions.https.onCall(
 /**
  * Get only 5-star reviews for marketing site display
  * Public function - no authentication required
+ * CORS enabled for web requests
  */
-export const getFiveStarReviews = functions.https.onCall(
-  async (data) => {
-    const {limit = 10, offset = 0} = data ?? {};
+export const getFiveStarReviews = functions.https.onRequest(
+  async (req, res) => {
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      addCorsHeaders(res);
+      res.status(204).send("");
+      return;
+    }
+
+    addCorsHeaders(res);
 
     try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const offset = parseInt(req.query.offset as string) || 0;
+
       const snapshot = await db
         .collection("reviews")
         .where("rating", "==", 5)
@@ -173,16 +195,17 @@ export const getFiveStarReviews = functions.https.onCall(
         createdAt: doc.data().createdAt?.toDate?.(),
       }));
 
-      return {
+      res.json({
         success: true,
         reviews,
         count: reviews.length,
-      };
+      });
     } catch (error) {
-      throw new functions.https.HttpsError(
-        "internal",
-        "Failed to retrieve 5-star reviews"
-      );
+      console.error(error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to retrieve 5-star reviews",
+      });
     }
   }
 );

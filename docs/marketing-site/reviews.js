@@ -1,3 +1,8 @@
+// Import Firebase modules
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
+import { getFirestore, collection, getDocs, query, where, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
 // Initialize Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
@@ -8,11 +13,9 @@ const firebaseConfig = {
   appId: "1:5675548760:web:a55e537ee4cff9df4aca2d"
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-
-// Get reference to Cloud Functions
-const functions = firebase.functions();
+const app = initializeApp(firebaseConfig);
+const functions = getFunctions(app);
+const db = getFirestore(app);
 
 /**
  * Fetch 5-star reviews from Firebase and display them
@@ -22,17 +25,25 @@ async function loadFiveStarReviews() {
   const loadingCard = document.querySelector('.review-card.loading');
 
   try {
-    const getFiveStarReviews = functions.httpsCallable('getFiveStarReviews');
-    const result = await getFiveStarReviews({ limit: 20 });
+    // Call the CORS-enabled Cloud Function via HTTP
+    const response = await fetch(
+      'https://us-central1-fyp-deepfakeguard.cloudfunctions.net/getFiveStarReviews?limit=20'
+    );
 
-    if (result.data.success && result.data.reviews.length > 0) {
+    if (!response.ok) {
+      throw new Error('Failed to fetch reviews');
+    }
+
+    const result = await response.json();
+
+    if (result.success && result.reviews.length > 0) {
       // Clear loading card
       if (loadingCard) {
         loadingCard.remove();
       }
 
       // Add each review to the slider
-      result.data.reviews.forEach((review) => {
+      result.reviews.forEach((review) => {
         const reviewCard = createReviewCard(review);
         reviewSlider.appendChild(reviewCard);
       });
@@ -105,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
  * Then refresh the page to see them displayed
  */
 window.addSampleReviews = async function() {
-  const db = firebase.firestore();
   const sampleReviews = [
     {
       rating: 5,
@@ -136,7 +146,7 @@ window.addSampleReviews = async function() {
 
   try {
     for (const review of sampleReviews) {
-      await db.collection('reviews').add({
+      await addDoc(collection(db, 'reviews'), {
         ...review,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -159,14 +169,12 @@ window.clearAllReviews = async function() {
     return;
   }
 
-  const db = firebase.firestore();
   try {
-    const snapshot = await db.collection('reviews').get();
-    const batch = db.batch();
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
+    const q = query(collection(db, 'reviews'));
+    const snapshot = await getDocs(q);
+    for (const reviewDoc of snapshot.docs) {
+      await deleteDoc(doc(db, 'reviews', reviewDoc.id));
+    }
     console.log('✅ All reviews deleted successfully!');
     alert('All reviews deleted! Refresh the page.');
   } catch (error) {

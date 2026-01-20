@@ -74,7 +74,7 @@ service cloud.firestore {
        ========================= */
     match /reviews/{reviewId} {
       allow read: if true; // Anyone can read reviews
-      allow create: if signedIn(); // Cloud Function writes via this rule
+      allow create: if signedIn(); // Authenticated users can add reviews
       allow update, delete: if false; // Cloud Functions handle deletion
     }
 
