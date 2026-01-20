@@ -192,7 +192,7 @@ export const getFiveStarReviews = functions.https.onRequest(
         id: doc.id,
         rating: doc.data().rating,
         description: doc.data().description,
-        user_id: doc.data().user_id,
+        userId: doc.data().userId,
         createdAt: doc.data().createdAt?.toDate?.(),
       }));
 
