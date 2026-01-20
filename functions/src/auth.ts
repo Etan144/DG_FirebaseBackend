@@ -1,9 +1,5 @@
 import * as functions from "firebase-functions/v1";
-import {initializeApp} from "firebase-admin/app";
-import {getFirestore} from "firebase-admin/firestore";
-
-initializeApp();
-const db = getFirestore();
+import {db} from "./firebase";
 
 /**
  * Check if a username is available

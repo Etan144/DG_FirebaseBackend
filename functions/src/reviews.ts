@@ -1,9 +1,6 @@
 import * as functions from "firebase-functions/v1";
-import {initializeApp} from "firebase-admin/app";
-import {getFirestore, FieldValue} from "firebase-admin/firestore";
-
-initializeApp();
-const db = getFirestore();
+import {FieldValue} from "firebase-admin/firestore";
+import {db} from "./firebase";
 
 // Helper function to add CORS headers
 const corsHeaders = {
