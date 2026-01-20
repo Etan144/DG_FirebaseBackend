@@ -70,6 +70,15 @@ service cloud.firestore {
     }
 
     /* =========================
+       CUSTOMER REVIEWS
+       ========================= */
+    match /reviews/{reviewId} {
+      allow read: if true; // Anyone can read reviews
+      allow create: if signedIn(); // Cloud Function writes via this rule
+      allow update, delete: if false; // Cloud Functions handle deletion
+    }
+
+    /* =========================
        DEFAULT DENY
        ========================= */
     match /{document=**} {

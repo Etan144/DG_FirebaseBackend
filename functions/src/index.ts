@@ -11,6 +11,7 @@
 // import * as logger from "firebase-functions/logger";
 
 export {checkUsernameAvailable, claimUsername} from "./auth";
+export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
 
 
 // Start writing functions
