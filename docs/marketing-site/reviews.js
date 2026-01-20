@@ -2,6 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-functions.js";
 import { getFirestore, collection, getDocs, query, where, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -16,6 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const functions = getFunctions(app);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 /**
  * Fetch 5-star reviews from Firebase and display them
@@ -113,34 +115,41 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * TEST FUNCTION: Add sample 5-star reviews to Firebase
  * Call this in browser console: window.addSampleReviews()
- * Then refresh the page to see them displayed
+ * Requires: Must be logged in
  */
 window.addSampleReviews = async function() {
+  const currentUser = auth.currentUser;
+  
+  if (!currentUser) {
+    alert('❌ You must be logged in to add reviews. Please log in first.');
+    return;
+  }
+
   const sampleReviews = [
     {
       rating: 5,
       description: "Deepfake Guard has been a game-changer for our organization's security. The peace of mind it provides is invaluable.",
-      userId: "test-user-1"
+      user_id: currentUser.uid
     },
     {
       rating: 5,
       description: "The on-device processing is brilliant. It's fast, private, and doesn't drain the battery. Highly recommended.",
-      userId: "test-user-2"
+      user_id: currentUser.uid
     },
     {
       rating: 5,
       description: "Integration was seamless with the SDK. Their support team was fantastic and helped us get up and running in no time.",
-      userId: "test-user-3"
+      user_id: currentUser.uid
     },
     {
       rating: 5,
       description: "Outstanding solution for protecting against deepfake attacks. The real-time detection accuracy is impressive and the user experience is seamless.",
-      userId: "test-user-4"
+      user_id: currentUser.uid
     },
     {
       rating: 5,
       description: "We deployed this across our entire organization and haven't looked back. The detection confidence metrics are transparent and reliable.",
-      userId: "test-user-5"
+      user_id: currentUser.uid
     }
   ];
 
