@@ -2,6 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /* =========================
+       HELPERS
+       ========================= */
     function signedIn() {
       return request.auth != null;
     }
@@ -53,29 +56,48 @@ service cloud.firestore {
        ========================= */
     match /calls/{callId} {
 
-      allow create: if signedIn()
-        && (
-          request.auth.uid == request.resource.data.caller_user_id ||
-          request.auth.uid == request.resource.data.callee_user_id
-        );
+        // ONLY caller can create call
+        allow create: if signedIn()
+          && request.auth.uid == request.resource.data.caller_user_id;
 
-      allow read, update: if isParticipant(callId);
-      allow delete: if false;
+        // Participants can READ call docs (query-safe)
+        allow read: if signedIn()
+          && (
+            request.auth.uid == resource.data.caller_user_id ||
+            request.auth.uid == resource.data.callee_user_id
+          );
 
-      match /ice_candidates/{userId}/candidates/{candidateId} {
-        allow create: if isSelf(userId);
-        allow read: if isParticipant(callId);
-        allow update, delete: if false;
+        // Participants can UPDATE signaling
+        allow update: if signedIn()
+          && (
+            request.auth.uid == resource.data.caller_user_id ||
+            request.auth.uid == resource.data.callee_user_id
+          );
+
+        allow delete: if false;
+
+        /* ICE candidates */
+        match /ice_candidates/{userId}/candidates/{candidateId} {
+          allow create: if signedIn() && request.auth.uid == userId;
+          allow read: if signedIn()
+            && (
+              request.auth.uid == resource.data.caller_user_id ||
+              request.auth.uid == resource.data.callee_user_id
+            );
+          allow update, delete: if false;
+        }
       }
-    }
 
     /* =========================
        CUSTOMER REVIEWS
        ========================= */
     match /reviews/{reviewId} {
-      allow read: if true; // Anyone can read reviews
-      allow create: if signedIn(); // Authenticated users can add reviews
-      allow update, delete: if false; // Cloud Functions handle deletion
+      allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.user_id == request.auth.uid;
+
+      allow update, delete: if false; // Moderation via Cloud Functions
     }
 
     /* =========================
@@ -86,6 +108,3 @@ service cloud.firestore {
     }
   }
 }
-
-
-
