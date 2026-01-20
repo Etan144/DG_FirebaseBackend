@@ -95,7 +95,7 @@ service cloud.firestore {
       allow read: if true;
 
       allow create: if signedIn()
-        && request.resource.data.user_id == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid;
 
       allow update, delete: if false; // Moderation via Cloud Functions
     }

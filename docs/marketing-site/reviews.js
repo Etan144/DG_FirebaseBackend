@@ -19,6 +19,10 @@ const functions = getFunctions(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// Expose to window for console access
+window.auth = auth;
+window.db = db;
+
 /**
  * Fetch 5-star reviews from Firebase and display them
  */
@@ -118,38 +122,43 @@ document.addEventListener('DOMContentLoaded', () => {
  * Requires: Must be logged in
  */
 window.addSampleReviews = async function() {
+  // Wait a moment to ensure auth is fully initialized
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
   const currentUser = auth.currentUser;
   
   if (!currentUser) {
     alert('❌ You must be logged in to add reviews. Please log in first.');
     return;
   }
+  
+  console.log('Adding reviews for user:', currentUser.uid);
 
   const sampleReviews = [
     {
       rating: 5,
       description: "Deepfake Guard has been a game-changer for our organization's security. The peace of mind it provides is invaluable.",
-      user_id: currentUser.uid
+      userId: currentUser.uid
     },
     {
       rating: 5,
       description: "The on-device processing is brilliant. It's fast, private, and doesn't drain the battery. Highly recommended.",
-      user_id: currentUser.uid
+      userId: currentUser.uid
     },
     {
       rating: 5,
       description: "Integration was seamless with the SDK. Their support team was fantastic and helped us get up and running in no time.",
-      user_id: currentUser.uid
+      userId: currentUser.uid
     },
     {
       rating: 5,
       description: "Outstanding solution for protecting against deepfake attacks. The real-time detection accuracy is impressive and the user experience is seamless.",
-      user_id: currentUser.uid
+      userId: currentUser.uid
     },
     {
       rating: 5,
       description: "We deployed this across our entire organization and haven't looked back. The detection confidence metrics are transparent and reliable.",
-      user_id: currentUser.uid
+      userId: currentUser.uid
     }
   ];
 
