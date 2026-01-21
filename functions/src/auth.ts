@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions/v1";
-import {db} from "./firebase";
+import {auth, db} from "./firebase";
 
 /**
  * Check if a username is available
@@ -61,6 +61,57 @@ export const claimUsername = functions.https.onCall(
     });
 
     return {success: true};
+  }
+);
+
+/**
+ * Promote an existing user to admin.
+ * Only callable by an admin or owner. Admins cannot self-promote.
+ */
+export const addAdminUser = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const callerRole = context.auth.token.role;
+    if (callerRole !== "admin" && callerRole !== "owner") {
+      throw new functions.https.HttpsError("permission-denied", "Admin access required");
+    }
+
+    const {uid, displayName} = data ?? {};
+    if (typeof uid !== "string" || uid.trim().length === 0) {
+      throw new functions.https.HttpsError("invalid-argument", "User ID is required");
+    }
+
+    if (callerRole === "admin" && uid === context.auth.uid) {
+      throw new functions.https.HttpsError(
+          "permission-denied",
+          "Admins cannot grant themselves admin access"
+      );
+    }
+
+    const targetUid = uid.trim();
+
+    try {
+      await auth.getUser(targetUid); // Ensure user exists
+
+      await auth.setCustomUserClaims(targetUid, {role: "admin"});
+
+      await db.collection("users").doc(targetUid).set({
+        role: "admin",
+        ...(typeof displayName === "string" && displayName.trim().length > 0
+          ? {displayName: displayName.trim()}
+          : {}),
+      }, {merge: true});
+
+      return {success: true};
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      throw new functions.https.HttpsError("internal", "Failed to add admin user");
+    }
   }
 );
 
