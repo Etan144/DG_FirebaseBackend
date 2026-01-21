@@ -38,7 +38,7 @@ export const addReview = functions.https.onCall(
       throw new functions.https.HttpsError("unauthenticated", "Login required");
     }
 
-    const {rating, description} = data ?? {};
+    const {rating, description, anonymous} = data ?? {};
     const uid = context.auth.uid;
 
     // Validate rating
@@ -64,11 +64,15 @@ export const addReview = functions.https.onCall(
       );
     }
 
+    // Validate anonymous (default to false)
+    const isAnonymous = typeof anonymous === "boolean" ? anonymous : false;
+
     try {
       const reviewRef = await db.collection("reviews").add({
         userId: uid,
         rating: Math.round(rating),
         description: description.trim(),
+        anonymous: isAnonymous,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -188,12 +192,32 @@ export const getFiveStarReviews = functions.https.onRequest(
         .offset(offset)
         .get();
 
-      const reviews = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        rating: doc.data().rating,
-        description: doc.data().description,
-        userId: doc.data().userId,
-        createdAt: doc.data().createdAt?.toDate?.(),
+      const reviews = await Promise.all(snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        let displayName = "Customer Review";
+
+        // If not anonymous, fetch the user's display name
+        if (!data.anonymous) {
+          try {
+            const publicUserDoc = await db.collection("public_users").doc(data.userId).get();
+            if (publicUserDoc.exists) {
+              displayName = publicUserDoc.data()?.displayName || "Customer";
+            }
+          } catch (error) {
+            // Fallback if user document doesn't exist
+            displayName = "Customer";
+          }
+        }
+
+        return {
+          id: doc.id,
+          rating: data.rating,
+          description: data.description,
+          userId: data.userId,
+          anonymous: data.anonymous ?? false,
+          displayName: displayName,
+          createdAt: data.createdAt?.toDate?.(),
+        };
       }));
 
       res.json({

@@ -122,7 +122,7 @@ function createReviewCard(review) {
   const reviewText = document.createElement('p');
   reviewText.textContent = `"${review.description}"`;
 
-  // Create user info (use userId, you can enhance this with user profile data)
+  // Create user info (show "Customer Review" or username based on anonymous flag)
   const userInfo = document.createElement('strong');
   const dateString = review.createdAt
     ? new Date(review.createdAt).toLocaleDateString('en-US', {
@@ -131,7 +131,9 @@ function createReviewCard(review) {
         day: 'numeric',
       })
     : 'Recently';
-  userInfo.textContent = `- Customer Review • ${dateString}`;
+  
+  const displayName = review.displayName || (review.anonymous ? 'Customer Review' : 'Customer');
+  userInfo.textContent = `- ${displayName} • ${dateString}`;
 
   // Append to card
   card.appendChild(starsDiv);
@@ -168,27 +170,32 @@ window.addSampleReviews = async function() {
     {
       rating: 5,
       description: "Deepfake Guard has been a game-changer for our organization's security. The peace of mind it provides is invaluable.",
-      userId: currentUser.uid
+      userId: currentUser.uid,
+      anonymous: true
     },
     {
       rating: 5,
       description: "The on-device processing is brilliant. It's fast, private, and doesn't drain the battery. Highly recommended.",
-      userId: currentUser.uid
+      userId: currentUser.uid,
+      anonymous: false
     },
     {
       rating: 5,
       description: "Integration was seamless with the SDK. Their support team was fantastic and helped us get up and running in no time.",
-      userId: currentUser.uid
+      userId: currentUser.uid,
+      anonymous: true
     },
     {
       rating: 5,
       description: "Outstanding solution for protecting against deepfake attacks. The real-time detection accuracy is impressive and the user experience is seamless.",
-      userId: currentUser.uid
+      userId: currentUser.uid,
+      anonymous: false
     },
     {
       rating: 5,
       description: "We deployed this across our entire organization and haven't looked back. The detection confidence metrics are transparent and reliable.",
-      userId: currentUser.uid
+      userId: currentUser.uid,
+      anonymous: true
     }
   ];
 
