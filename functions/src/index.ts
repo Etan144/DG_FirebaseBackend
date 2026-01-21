@@ -10,7 +10,13 @@
 // import {onRequest} from "firebase-functions/https";
 // import * as logger from "firebase-functions/logger";
 
-export {checkUsernameAvailable, claimUsername, addAdminUser} from "./auth";
+export {
+  checkUsernameAvailable,
+  claimUsername,
+  addAdminUser,
+  generateAdminVerificationLink,
+  checkSendVerificationOnFirstLogin,
+} from "./auth";
 export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
 
 

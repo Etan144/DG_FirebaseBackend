@@ -86,8 +86,8 @@ export const addAdminUser = functions.https.onCall(
 
     if (callerRole === "admin" && uid === context.auth.uid) {
       throw new functions.https.HttpsError(
-          "permission-denied",
-          "Admins cannot grant themselves admin access"
+        "permission-denied",
+        "Admins cannot grant themselves admin access"
       );
     }
 
@@ -98,12 +98,14 @@ export const addAdminUser = functions.https.onCall(
 
       await auth.setCustomUserClaims(targetUid, {role: "admin"});
 
-      await db.collection("users").doc(targetUid).set({
+      const payload: Record<string, unknown> = {
         role: "admin",
-        ...(typeof displayName === "string" && displayName.trim().length > 0
-          ? {displayName: displayName.trim()}
-          : {}),
-      }, {merge: true});
+        needsVerificationOnFirstLogin: true,
+      };
+      if (typeof displayName === "string" && displayName.trim().length > 0) {
+        (payload as {displayName?: string}).displayName = displayName.trim();
+      }
+      await db.collection("users").doc(targetUid).set(payload, {merge: true});
 
       return {success: true};
     } catch (error) {
@@ -111,6 +113,107 @@ export const addAdminUser = functions.https.onCall(
         throw error;
       }
       throw new functions.https.HttpsError("internal", "Failed to add admin user");
+    }
+  }
+);
+
+/**
+ * Generate an email verification link for a user by email.
+ * Only callable by an admin or owner. Useful for accounts created by admins.
+ */
+export const generateAdminVerificationLink = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const callerRole = context.auth.token.role;
+    if (callerRole !== "admin" && callerRole !== "owner") {
+      throw new functions.https.HttpsError("permission-denied", "Admin access required");
+    }
+
+    const {email} = data ?? {};
+    if (typeof email !== "string" || email.trim().length === 0) {
+      throw new functions.https.HttpsError("invalid-argument", "Email is required");
+    }
+
+    const normalizedEmail = email.trim();
+
+    try {
+      await auth.getUserByEmail(normalizedEmail); // ensure user exists
+      const link = await auth.generateEmailVerificationLink(normalizedEmail);
+      return {success: true, link};
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      throw new functions.https.HttpsError(
+        "internal",
+        "Failed to generate verification link"
+      );
+    }
+  }
+);
+
+/**
+ * Check if verification email should be sent on first login (admin accounts only).
+ * Returns shouldSend flag for client to send via Firebase Auth SDK.
+ * Regular users get verification emails immediately after registration.
+ */
+export const checkSendVerificationOnFirstLogin = functions.https.onCall(
+  async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const uid = context.auth.uid;
+    const userRole = context.auth.token.role;
+
+    try {
+      const userRecord = await auth.getUser(uid);
+      if (userRecord.emailVerified) {
+        return {shouldSend: false, message: ""};
+      }
+
+      // Check if user is an admin or owner
+      const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+
+      if (!isAdminOrOwner) {
+        return {shouldSend: false, message: ""};
+      }
+
+      const userRef = db.collection("users").doc(uid);
+      let needsSend = false;
+
+      await db.runTransaction(async (tx) => {
+        const doc = await tx.get(userRef);
+        if (!doc.exists) {
+          return;
+        }
+
+        const verificationSent = doc.data()?.adminVerificationSent as boolean | undefined;
+        if (!verificationSent) {
+          needsSend = true;
+          tx.set(userRef, {adminVerificationSent: true}, {merge: true});
+        }
+      });
+
+      if (needsSend) {
+        return {
+          shouldSend: true,
+          message: "Verification link sent. Please verify your email before logging in.",
+        };
+      }
+
+      return {shouldSend: false, message: ""};
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      throw new functions.https.HttpsError(
+        "internal",
+        "Failed to check verification status"
+      );
     }
   }
 );
