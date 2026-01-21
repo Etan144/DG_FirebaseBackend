@@ -47,6 +47,42 @@
             <input type="email" id="email" required>
           </div>
 
+          <!-- Phone Number -->
+          <div class="form-group">
+            <label for="phone">Phone Number (Singapore)</label>
+            <div style="display:flex;align-items:center;background:rgba(255,255,255,0.03);border:1px solid var(--stroke);border-radius:12px;padding:0 20px;min-height:56px;margin-bottom:8px;">
+              <span style="color:var(--muted);font-weight:600;margin-right:8px;font-size:20px;">+65</span>
+              <input 
+                type="tel" 
+                id="phone" 
+                placeholder="91234567" 
+                maxlength="8"
+                pattern="[689]\d{7}"
+                required
+                style="flex:1;border:none;background:transparent;padding:18px 6px;font-size:20px;letter-spacing:2px;width:100%;">
+            </div>
+            <button 
+              type="button" 
+              id="send-code-btn" 
+              class="btn secondary"
+              style="width:100%;padding:16px;font-size:15px;">
+              Send Code
+            </button>
+            <div id="phone-hint" class="hint"></div>
+          </div>
+
+          <!-- Verification Code (Hidden initially) -->
+          <div class="form-group" id="code-group" style="display:none;">
+            <label for="verify-code">Verification Code</label>
+            <input 
+              type="text" 
+              id="verify-code" 
+              placeholder="Enter 6-digit code" 
+              maxlength="6"
+              pattern="\d{6}">
+            <div id="code-hint" class="hint"></div>
+          </div>
+
           <!-- Password -->
           <div class="form-group">
             <label for="password">Password</label>
@@ -76,6 +112,7 @@
           </button>
         </form>
 
+        <div id="recaptcha-container"></div>
         <div id="feedback" class="feedback"></div>
       </div>
     </section>
@@ -88,7 +125,11 @@
     import {
       getAuth,
       createUserWithEmailAndPassword,
-      sendEmailVerification
+      sendEmailVerification,
+      RecaptchaVerifier,
+      signInWithPhoneNumber,
+      linkWithCredential,
+      PhoneAuthProvider
     } from
       "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
     import {
@@ -109,14 +150,27 @@
     const checkUsername =
       httpsCallable(functions, "checkUsernameAvailable");
 
+    const claimUsername = httpsCallable(functions, "claimUsername");
+
+    let recaptchaVerifier;
+    let confirmationResult;
+
     const usernameInput = document.getElementById("username");
     const usernameHint = document.getElementById("username-hint");
+    const phoneInput = document.getElementById("phone");
+    const phoneHint = document.getElementById("phone-hint");
+    const sendCodeBtn = document.getElementById("send-code-btn");
+    const codeGroup = document.getElementById("code-group");
+    const verifyCodeInput = document.getElementById("verify-code");
+    const codeHint = document.getElementById("code-hint");
     const passwordInput = document.getElementById("password");
     const strengthFill = document.getElementById("strength-fill");
     const feedback = document.getElementById("feedback");
     const form = document.getElementById("register-form");
 
     let usernameAvailable = false;
+    let phoneVerified = false;
+    let codeSent = false;
     let debounceTimer;
 
     function isPasswordStrong(password) {
@@ -128,6 +182,184 @@
         /[^A-Za-z0-9]/.test(password)
       );
     }
+
+    function isValidSingaporePhone(phone) {
+      // Accepts 8 digits starting with 6, 8, or 9
+      const cleaned = phone.replace(/\s/g, "");
+      return /^[689]\d{7}$/.test(cleaned);
+    }
+
+    function getFullPhoneNumber(phone) {
+      // Add +65 prefix to the 8-digit number
+      return "+65" + phone.replace(/\s/g, "");
+    }
+
+    /* 🔹 PHONE NUMBER VALIDATION */
+    phoneInput.addEventListener("input", () => {
+      // Only allow digits
+      phoneInput.value = phoneInput.value.replace(/\D/g, "");
+      
+      const phone = phoneInput.value.trim();
+      
+      if (phone.length === 0) {
+        phoneHint.textContent = "";
+        phoneHint.className = "hint";
+        sendCodeBtn.disabled = true;
+        return;
+      }
+
+      if (phone.length < 8) {
+        phoneHint.textContent = `Enter ${8 - phone.length} more digit${8 - phone.length > 1 ? 's' : ''}`;
+        phoneHint.className = "hint";
+        sendCodeBtn.disabled = true;
+        return;
+      }
+
+      if (isValidSingaporePhone(phone)) {
+        phoneHint.textContent = "✓ Valid phone number";
+        phoneHint.className = "hint ok";
+        sendCodeBtn.disabled = false;
+      } else {
+        phoneHint.textContent = "Must start with 6, 8, or 9";
+        phoneHint.className = "hint error";
+        sendCodeBtn.disabled = true;
+      }
+    });
+
+    /* 🔹 SEND VERIFICATION CODE */
+    sendCodeBtn.addEventListener("click", async () => {
+      const phone = phoneInput.value.trim();
+      
+      if (!isValidSingaporePhone(phone)) {
+        phoneHint.textContent = "Invalid phone number format";
+        phoneHint.className = "hint error";
+        return;
+      }
+
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = "Sending...";
+      phoneHint.textContent = "Sending verification code...";
+      phoneHint.className = "hint";
+
+      try {
+        // Need to create account first
+        const email = document.getElementById("email").value.trim();
+        const password = passwordInput.value;
+
+        if (!email || !password) {
+          phoneHint.textContent = "Please fill email and password first";
+          phoneHint.className = "hint error";
+          sendCodeBtn.disabled = false;
+          sendCodeBtn.textContent = "Send Code";
+          return;
+        }
+
+        if (!isPasswordStrong(password)) {
+          phoneHint.textContent = "Please meet password requirements first";
+          phoneHint.className = "hint error";
+          sendCodeBtn.disabled = false;
+          sendCodeBtn.textContent = "Send Code";
+          return;
+        }
+
+        // Create Firebase account first
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+        // Initialize reCAPTCHA verifier
+        if (!recaptchaVerifier) {
+          recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            size: 'invisible',
+            callback: () => {
+              // reCAPTCHA solved
+            }
+          });
+        }
+
+        // Send SMS via Firebase Phone Auth
+        const fullPhone = getFullPhoneNumber(phone);
+        const appVerifier = recaptchaVerifier;
+        
+        // Use the auth instance to send verification
+        const provider = new PhoneAuthProvider(auth);
+        const verificationId = await provider.verifyPhoneNumber(fullPhone, appVerifier);
+        
+        // Store for later verification
+        confirmationResult = {
+          verificationId: verificationId,
+          confirm: async (code) => {
+            const credential = PhoneAuthProvider.credential(verificationId, code);
+            return await linkWithCredential(auth.currentUser, credential);
+          }
+        };
+
+        codeSent = true;
+        phoneInput.disabled = true;
+        codeGroup.style.display = "block";
+        phoneHint.textContent = "✓ Verification code sent via SMS";
+        phoneHint.className = "hint ok";
+        sendCodeBtn.textContent = "Code Sent";
+        verifyCodeInput.focus();
+
+      } catch (error) {
+        console.error("Error sending code:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        
+        if (error.code === "auth/email-already-in-use") {
+          phoneHint.textContent = "Email already registered. Please login.";
+        } else if (error.code === "auth/too-many-requests") {
+          phoneHint.textContent = "Too many requests. Please try again later.";
+        } else if (error.code === "auth/invalid-phone-number") {
+          phoneHint.textContent = "Invalid phone number format.";
+        } else if (error.code === "auth/missing-phone-number") {
+          phoneHint.textContent = "Phone number is required.";
+        } else {
+          phoneHint.textContent = `Error: ${error.message || "Failed to send code. Try again."}`;
+        }
+        phoneHint.className = "hint error";
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = "Send Code";
+      }
+    });
+
+    /* 🔹 VERIFY CODE ON INPUT */
+    verifyCodeInput.addEventListener("input", async () => {
+      const code = verifyCodeInput.value.trim();
+
+      if (code.length !== 6) {
+        return;
+      }
+
+      codeHint.textContent = "Verifying...";
+      codeHint.className = "hint";
+      verifyCodeInput.disabled = true;
+
+      try {
+        // Verify code with Firebase - this automatically links the phone
+        const result = await confirmationResult.confirm(code);
+
+        phoneVerified = true;
+        codeHint.textContent = "✓ Phone verified successfully";
+        codeHint.className = "hint ok";
+        verifyCodeInput.style.borderColor = "var(--accent)";
+      } catch (error) {
+        console.error("Verification error:", error);
+        phoneVerified = false;
+        
+        if (error.code === "auth/invalid-verification-code") {
+          codeHint.textContent = "Invalid code. Please try again.";
+        } else if (error.code === "auth/code-expired") {
+          codeHint.textContent = "Code expired. Request a new one.";
+        } else {
+          codeHint.textContent = error.message || "Invalid code. Try again.";
+        }
+        
+        codeHint.className = "hint error";
+        verifyCodeInput.disabled = false;
+        verifyCodeInput.value = "";
+        verifyCodeInput.focus();
+      }
+    });
 
     /* 🔹 LIVE USERNAME CHECK */
     usernameInput.addEventListener("input", () => {
@@ -204,6 +436,7 @@
       const email = document.getElementById("email").value.trim();
       const password = passwordInput.value;
       const confirm = document.getElementById("confirm").value;
+      const phone = phoneInput.value.trim();
 
       if (!usernameAvailable) {
         feedback.textContent = "Please choose an available username.";
@@ -224,23 +457,53 @@
         return;
       }
 
-      try {
-        const cred =
-          await createUserWithEmailAndPassword(auth, email, password);
+      if (!isValidSingaporePhone(phone) || phone.length !== 8) {
+        feedback.textContent = "Please enter a valid 8-digit Singapore phone number.";
+        feedback.style.color = "red";
+        return;
+      }
 
-        await sendEmailVerification(cred.user);
-        localStorage.setItem("pendingUsername", usernameInput.value.trim());
+      if (!codeSent) {
+        feedback.textContent = "Please verify your phone number first.";
+        feedback.style.color = "red";
+        return;
+      }
+
+      if (!phoneVerified) {
+        feedback.textContent = "Please verify your phone number with the code sent.";
+        feedback.style.color = "red";
+        return;
+      }
+
+      console.log("All validations passed, attempting registration...");
+      feedback.textContent = "Creating account...";
+      feedback.style.color = "var(--accent)";
+
+      try {
+        // User account already created when code was sent
+        // Now claim username and send email verification
+        console.log("Claiming username...");
+        await claimUsername({ username: usernameInput.value.trim() });
+        
+        console.log("Sending email verification...");
+        const user = auth.currentUser;
+        if (user) {
+          await sendEmailVerification(user);
+        }
 
         feedback.textContent =
-          "Account created! Verify your email, then log in.";
+          "Account created! Phone verified. Please verify your email to complete registration.";
         feedback.style.color = "var(--accent)";
 
         setTimeout(() => {
           window.location.href = "LoginPage.html";
         }, 3000);
 
-      } catch {
-        feedback.textContent = "Registration failed.";
+      } catch (error) {
+        console.error("Registration error:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        feedback.textContent = error.message || "Registration failed.";
         feedback.style.color = "red";
       }
     });

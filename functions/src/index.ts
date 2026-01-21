@@ -16,6 +16,10 @@ export {
   addAdminUser,
   generateAdminVerificationLink,
   checkSendVerificationOnFirstLogin,
+  sendPhoneVerificationCode,
+  verifyPhoneCode,
+  checkPhoneVerificationStatus,
+  fixAdminUsername,
 } from "./auth";
 export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
 

@@ -29,7 +29,9 @@
     .cta { display: flex; align-items: center; gap: 10px; }
     .btn { padding: 11px 16px; border-radius: 12px; border: 1px solid var(--stroke); background: rgba(255,255,255,0.02); color: var(--text); font-weight: 600; transition: 0.18s ease; cursor: pointer; }
     .btn.primary { background: linear-gradient(120deg, var(--accent), var(--accent-2)); color: #03101a; border: none; box-shadow: 0 10px 40px rgba(27,212,242,0.32); }
+    .btn.secondary { background: rgba(27,212,242,0.1); color: var(--accent); border: 1px solid var(--accent); }
     .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     .hero { margin-top: 42px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px; align-items: center; }
     .eyebrow { color: var(--accent); font-weight: 600; letter-spacing: 0.08em; font-size: 12px; text-transform: uppercase; }

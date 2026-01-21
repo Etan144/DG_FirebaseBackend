@@ -2,6 +2,67 @@ import * as functions from "firebase-functions/v1";
 import {auth, db} from "./firebase";
 
 /**
+ * Validate Singapore phone number format
+ * Expected format: +65 followed by 8 digits starting with 6, 8, or 9
+ * @param {string} phoneNumber - The phone number to validate
+ * @return {boolean} True if valid Singapore phone number
+ */
+function isValidSingaporePhoneNumber(phoneNumber: string): boolean {
+  // Singapore phone numbers: +65 followed by 8 digits starting with 6, 8, or 9
+  const singaporePhoneRegex = /^\+65[689]\d{7}$/;
+  return singaporePhoneRegex.test(phoneNumber.replace(/\s/g, ""));
+}
+
+/**
+ * Generate a 6-digit verification code
+ * @return {string} A 6-digit verification code
+ */
+function generateVerificationCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * One-time function to add admin username to usernames collection
+ * Call this once to fix the manually created admin
+ */
+export const fixAdminUsername = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const {username} = data ?? {};
+    if (typeof username !== "string") {
+      throw new functions.https.HttpsError("invalid-argument", "Username required");
+    }
+
+    const normalized = username.toLowerCase().trim();
+
+    // Find user with this username in users collection
+    const usersQuery = await db.collection("users")
+      .where("username", "==", normalized)
+      .limit(1)
+      .get();
+
+    if (usersQuery.empty) {
+      throw new functions.https.HttpsError("not-found", "User not found");
+    }
+
+    const userDoc = usersQuery.docs[0];
+    const uid = userDoc.id;
+
+    // Add to usernames collection
+    await db.collection("usernames").doc(normalized).set({uid});
+
+    return {
+      success: true,
+      message: `Added ${normalized} to usernames collection`,
+      uid,
+    };
+  }
+);
+
+/**
  * Check if a username is available
  */
 export const checkUsernameAvailable = functions.https.onCall(
@@ -12,9 +73,20 @@ export const checkUsernameAvailable = functions.https.onCall(
     }
 
     const normalized = username.toLowerCase().trim();
-    const snap = await db.collection("usernames").doc(normalized).get();
 
-    return {available: !snap.exists};
+    // Check usernames collection (regular users)
+    const usernameSnap = await db.collection("usernames").doc(normalized).get();
+    if (usernameSnap.exists) {
+      return {available: false};
+    }
+
+    // Also check users collection (for manually created admins)
+    const usersQuery = await db.collection("users")
+      .where("username", "==", normalized)
+      .limit(1)
+      .get();
+
+    return {available: usersQuery.empty};
   }
 );
 
@@ -213,6 +285,217 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
       throw new functions.https.HttpsError(
         "internal",
         "Failed to check verification status"
+      );
+    }
+  }
+);
+
+/**
+ * Send phone verification code to a Singapore phone number.
+ * Stores the code in Firestore with expiration time (5 minutes).
+ */
+export const sendPhoneVerificationCode = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const {phoneNumber} = data ?? {};
+    if (typeof phoneNumber !== "string") {
+      throw new functions.https.HttpsError("invalid-argument", "Phone number required");
+    }
+
+    const normalizedPhone = phoneNumber.replace(/\s/g, "");
+
+    // Validate Singapore phone number
+    if (!isValidSingaporePhoneNumber(normalizedPhone)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Invalid Singapore phone number. Must be +65 followed by 8 digits starting with 6, 8, or 9"
+      );
+    }
+
+    const uid = context.auth.uid;
+    const code = generateVerificationCode();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+
+    try {
+      // Store verification code in Firestore
+      await db.collection("phone_verifications").doc(uid).set({
+        phoneNumber: normalizedPhone,
+        code,
+        expiresAt,
+        createdAt: Date.now(),
+        verified: false,
+        attempts: 0,
+      });
+
+      // In production, you would integrate with an SMS provider like Twilio here
+      // For now, log the code for testing purposes
+      functions.logger.info(`Verification code for ${normalizedPhone}: ${code}`);
+
+      return {
+        success: true,
+        message: "Verification code sent",
+      };
+    } catch (error) {
+      functions.logger.error("Failed to send verification code:", error);
+      throw new functions.https.HttpsError(
+        "internal",
+        "Failed to send verification code"
+      );
+    }
+  }
+);
+
+/**
+ * Verify phone number with the provided code.
+ */
+export const verifyPhoneCode = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const {code} = data ?? {};
+    if (typeof code !== "string") {
+      throw new functions.https.HttpsError("invalid-argument", "Verification code required");
+    }
+
+    const uid = context.auth.uid;
+    const verificationRef = db.collection("phone_verifications").doc(uid);
+
+    try {
+      const result = await db.runTransaction(async (tx) => {
+        const doc = await tx.get(verificationRef);
+        if (!doc.exists) {
+          throw new functions.https.HttpsError(
+            "not-found",
+            "No verification code found. Please request a new code."
+          );
+        }
+
+        const data = doc.data();
+        if (!data) {
+          throw new functions.https.HttpsError(
+            "not-found",
+            "No verification data found. Please request a new code."
+          );
+        }
+
+        const {
+          code: storedCode,
+          expiresAt,
+          verified,
+          attempts,
+          phoneNumber,
+        } = data as {
+          code: string;
+          expiresAt: number;
+          verified: boolean;
+          attempts: number;
+          phoneNumber: string;
+        };
+
+        // Check if already verified
+        if (verified) {
+          throw new functions.https.HttpsError(
+            "already-exists",
+            "Phone number already verified"
+          );
+        }
+
+        // Check expiration
+        if (Date.now() > expiresAt) {
+          throw new functions.https.HttpsError(
+            "deadline-exceeded",
+            "Verification code expired. Please request a new code."
+          );
+        }
+
+        // Check attempts (max 3)
+        if (attempts >= 3) {
+          throw new functions.https.HttpsError(
+            "resource-exhausted",
+            "Too many failed attempts. Please request a new code."
+          );
+        }
+
+        // Verify code
+        if (code !== storedCode) {
+          tx.update(verificationRef, {attempts: attempts + 1});
+          throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Invalid verification code"
+          );
+        }
+
+        // Mark as verified
+        tx.update(verificationRef, {
+          verified: true,
+          verifiedAt: Date.now(),
+        });
+
+        // Update user record with verified phone
+        const userRef = db.collection("users").doc(uid);
+        tx.set(
+          userRef,
+          {
+            phoneNumber,
+            phoneVerified: true,
+            phoneVerifiedAt: Date.now(),
+          },
+          {merge: true}
+        );
+
+        return {phoneNumber};
+      });
+
+      return {
+        success: true,
+        message: "Phone number verified successfully",
+        phoneNumber: result.phoneNumber,
+      };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      functions.logger.error("Failed to verify phone code:", error);
+      throw new functions.https.HttpsError("internal", "Failed to verify phone number");
+    }
+  }
+);
+
+/**
+ * Check if user's phone number is verified.
+ */
+export const checkPhoneVerificationStatus = functions.https.onCall(
+  async (_data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const uid = context.auth.uid;
+
+    try {
+      const userDoc = await db.collection("users").doc(uid).get();
+      if (!userDoc.exists) {
+        return {
+          phoneVerified: false,
+          phoneNumber: null,
+        };
+      }
+
+      const data = userDoc.data();
+      return {
+        phoneVerified: data?.phoneVerified === true,
+        phoneNumber: data?.phoneNumber || null,
+      };
+    } catch (error) {
+      functions.logger.error("Failed to check phone verification status:", error);
+      throw new functions.https.HttpsError(
+        "internal",
+        "Failed to check phone verification status"
       );
     }
   }
