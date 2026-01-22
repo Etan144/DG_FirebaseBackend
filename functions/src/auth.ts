@@ -170,14 +170,28 @@ export const addAdminUser = functions.https.onCall(
 
       await auth.setCustomUserClaims(targetUid, {role: "admin"});
 
+      // Only update role and admin-specific fields, preserve existing user data
       const payload: Record<string, unknown> = {
         role: "admin",
         needsVerificationOnFirstLogin: true,
       };
+
+      // Only set displayName if provided AND user doesn't already have one
       if (typeof displayName === "string" && displayName.trim().length > 0) {
-        (payload as {displayName?: string}).displayName = displayName.trim();
+        const userDoc = await db.collection("users").doc(targetUid).get();
+        if (!userDoc.exists || !userDoc.data()?.displayName) {
+          payload.displayName = displayName.trim();
+        }
       }
+
       await db.collection("users").doc(targetUid).set(payload, {merge: true});
+
+      // Also update public_users if it exists (preserve existing data)
+      const publicUserRef = db.collection("public_users").doc(targetUid);
+      const publicUserDoc = await publicUserRef.get();
+      if (publicUserDoc.exists) {
+        await publicUserRef.set({role: "admin"}, {merge: true});
+      }
 
       return {success: true};
     } catch (error) {
@@ -239,7 +253,6 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
     }
 
     const uid = context.auth.uid;
-    const userRole = context.auth.token.role;
 
     try {
       const userRecord = await auth.getUser(uid);
@@ -247,13 +260,8 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
         return {shouldSend: false, message: ""};
       }
 
-      // Check if user is an admin or owner
-      const isAdminOrOwner = userRole === "admin" || userRole === "owner";
-
-      if (!isAdminOrOwner) {
-        return {shouldSend: false, message: ""};
-      }
-
+      // Check database for role and verification status
+      // (can't rely on token.role on first login before token refresh)
       const userRef = db.collection("users").doc(uid);
       let needsSend = false;
 
@@ -263,10 +271,19 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
           return;
         }
 
-        const verificationSent = doc.data()?.adminVerificationSent as boolean | undefined;
-        if (!verificationSent) {
+        const data = doc.data();
+        const userRole = data?.role as string | undefined;
+        const needsVerification = data?.needsVerificationOnFirstLogin as boolean | undefined;
+        const verificationSent = data?.adminVerificationSent as boolean | undefined;
+
+        // Only send for admin/owner accounts that need verification and haven't been sent yet
+        const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+        if (isAdminOrOwner && needsVerification && !verificationSent) {
           needsSend = true;
-          tx.set(userRef, {adminVerificationSent: true}, {merge: true});
+          tx.set(userRef, {
+            adminVerificationSent: true,
+            needsVerificationOnFirstLogin: false,
+          }, {merge: true});
         }
       });
 
