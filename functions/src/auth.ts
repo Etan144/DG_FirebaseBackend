@@ -133,6 +133,9 @@ export const claimUsername = functions.https.onCall(
     const userRef = db.collection("users").doc(uid);
     const publicRef = db.collection("public_users").doc(uid);
 
+    // Check if this is being called by admin for another user
+    const isAdminCreatingForOther = uid !== context.auth.uid;
+
     await db.runTransaction(async (tx) => {
       const nameSnap = await tx.get(usernameRef);
       if (nameSnap.exists) {
@@ -140,12 +143,20 @@ export const claimUsername = functions.https.onCall(
       }
 
       tx.set(usernameRef, {uid});
-      tx.set(userRef, {
+
+      // If admin is creating for another user, don't set role yet (addAdminUser will set it)
+      // Otherwise, set role to REGISTERED for normal user registration
+      const userPayload: Record<string, string | number> = {
         username: normalized,
         displayName: displayName || normalized,
-        role: "REGISTERED",
         createdAtSeconds: Math.floor(Date.now() / 1000),
-      });
+      };
+
+      if (!isAdminCreatingForOther) {
+        userPayload.role = "REGISTERED";
+      }
+
+      tx.set(userRef, userPayload);
 
       tx.set(publicRef, {
         username: normalized,
