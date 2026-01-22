@@ -207,6 +207,7 @@ export const addAdminUser = functions.https.onCall(
       const payload: Record<string, unknown> = {
         role: "admin",
         needsVerificationOnFirstLogin: true,
+        adminVerificationSent: false,
       };
 
       // Only set displayName if provided AND user doesn't already have one
@@ -216,6 +217,9 @@ export const addAdminUser = functions.https.onCall(
           payload.displayName = displayName.trim();
         }
       }
+
+      // Log for debugging
+      functions.logger.info(`Setting admin role for UID: ${targetUid}`, payload);
 
       await db.collection("users").doc(targetUid).set(payload, {merge: true});
 
