@@ -136,6 +136,20 @@ export const claimUsername = functions.https.onCall(
     // Check if this is being called by admin for another user
     const isAdminCreatingForOther = uid !== context.auth.uid;
 
+    // If admin is creating for another user, check if role was already set via custom claims
+    let roleToSet = "REGISTERED";
+    if (isAdminCreatingForOther) {
+      try {
+        const targetUser = await auth.getUser(uid);
+        const customRole = targetUser.customClaims?.role as string | undefined;
+        if (customRole) {
+          roleToSet = customRole;
+        }
+      } catch (error) {
+        functions.logger.warn(`Could not fetch custom claims for ${uid}:`, error);
+      }
+    }
+
     await db.runTransaction(async (tx) => {
       const nameSnap = await tx.get(usernameRef);
       if (nameSnap.exists) {
@@ -144,16 +158,18 @@ export const claimUsername = functions.https.onCall(
 
       tx.set(usernameRef, {uid});
 
-      // If admin is creating for another user, don't set role yet (addAdminUser will set it)
-      // Otherwise, set role to REGISTERED for normal user registration
-      const userPayload: Record<string, string | number> = {
+      // Create user profile with appropriate role
+      const userPayload: Record<string, string | number | boolean> = {
         username: normalized,
         displayName: displayName || normalized,
         createdAtSeconds: Math.floor(Date.now() / 1000),
+        role: roleToSet,
       };
 
-      if (!isAdminCreatingForOther) {
-        userPayload.role = "REGISTERED";
+      // Add admin-specific fields if role is admin
+      if (roleToSet === "admin") {
+        userPayload.needsVerificationOnFirstLogin = true;
+        userPayload.adminVerificationSent = false;
       }
 
       tx.set(userRef, userPayload);
@@ -166,6 +182,50 @@ export const claimUsername = functions.https.onCall(
     });
 
     return {success: true};
+  }
+);
+
+/**
+ * Finalize admin user creation by ensuring all required fields are set.
+ * Called after Firebase Auth user is created but before profile setup.
+ * Only callable by an admin or owner.
+ */
+export const finalizeAdminUser = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Login required");
+    }
+
+    const callerRole = context.auth.token.role;
+    if (callerRole !== "admin" && callerRole !== "owner") {
+      throw new functions.https.HttpsError("permission-denied", "Admin access required");
+    }
+
+    const {uid, role} = data ?? {};
+    if (typeof uid !== "string" || uid.trim().length === 0) {
+      throw new functions.https.HttpsError("invalid-argument", "User ID is required");
+    }
+
+    const targetUid = uid.trim();
+    const targetRole = (typeof role === "string" && role.trim().length > 0) ? role.trim() : "admin";
+
+    try {
+      // Verify user exists in Firebase Auth
+      await auth.getUser(targetUid);
+
+      // Set custom claims
+      await auth.setCustomUserClaims(targetUid, {role: targetRole});
+
+      functions.logger.info(`Finalized admin user: ${targetUid} with role: ${targetRole}`);
+
+      return {success: true, role: targetRole};
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      functions.logger.error("Failed to finalize admin user:", error);
+      throw new functions.https.HttpsError("internal", "Failed to finalize admin user");
+    }
   }
 );
 

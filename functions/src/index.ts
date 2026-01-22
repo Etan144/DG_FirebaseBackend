@@ -14,6 +14,7 @@ export {
   checkUsernameAvailable,
   claimUsername,
   addAdminUser,
+  finalizeAdminUser,
   generateAdminVerificationLink,
   checkSendVerificationOnFirstLogin,
   sendPhoneVerificationCode,
