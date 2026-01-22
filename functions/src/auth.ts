@@ -92,6 +92,7 @@ export const checkUsernameAvailable = functions.https.onCall(
 
 /**
  * Claim username AND create user records
+ * Admins can optionally specify a uid to create profiles for other users
  */
 export const claimUsername = functions.https.onCall(
   async (data, context) => {
@@ -99,8 +100,29 @@ export const claimUsername = functions.https.onCall(
       throw new functions.https.HttpsError("unauthenticated", "Login required");
     }
 
-    const {username, displayName} = data ?? {};
-    const uid = context.auth.uid;
+    const {username, displayName, uid: targetUid} = data ?? {};
+
+    // Determine which UID to use
+    let uid = context.auth.uid;
+
+    // If targetUid is provided, verify caller is admin/owner
+    if (typeof targetUid === "string" && targetUid.trim().length > 0) {
+      const callerRole = context.auth.token.role;
+      if (callerRole !== "admin" && callerRole !== "owner") {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Only admins can create profiles for other users"
+        );
+      }
+
+      // Verify target user exists in Firebase Auth
+      try {
+        await auth.getUser(targetUid.trim());
+        uid = targetUid.trim();
+      } catch (error) {
+        throw new functions.https.HttpsError("not-found", "Target user not found");
+      }
+    }
 
     if (typeof username !== "string") {
       throw new functions.https.HttpsError("invalid-argument", "Username required");
