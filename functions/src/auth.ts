@@ -92,7 +92,6 @@ export const checkUsernameAvailable = functions.https.onCall(
 
 /**
  * Claim username AND create user records
- * Admins can optionally specify a uid to create profiles for other users
  */
 export const claimUsername = functions.https.onCall(
   async (data, context) => {
@@ -100,29 +99,8 @@ export const claimUsername = functions.https.onCall(
       throw new functions.https.HttpsError("unauthenticated", "Login required");
     }
 
-    const {username, displayName, uid: targetUid} = data ?? {};
-
-    // Determine which UID to use
-    let uid = context.auth.uid;
-
-    // If targetUid is provided, verify caller is admin/owner
-    if (typeof targetUid === "string" && targetUid.trim().length > 0) {
-      const callerRole = context.auth.token.role;
-      if (callerRole !== "admin" && callerRole !== "owner") {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Only admins can create profiles for other users"
-        );
-      }
-
-      // Verify target user exists in Firebase Auth
-      try {
-        await auth.getUser(targetUid.trim());
-        uid = targetUid.trim();
-      } catch (error) {
-        throw new functions.https.HttpsError("not-found", "Target user not found");
-      }
-    }
+    const {username, displayName} = data ?? {};
+    const uid = context.auth.uid;
 
     if (typeof username !== "string") {
       throw new functions.https.HttpsError("invalid-argument", "Username required");
@@ -133,23 +111,6 @@ export const claimUsername = functions.https.onCall(
     const userRef = db.collection("users").doc(uid);
     const publicRef = db.collection("public_users").doc(uid);
 
-    // Check if this is being called by admin for another user
-    const isAdminCreatingForOther = uid !== context.auth.uid;
-
-    // If admin is creating for another user, check if role was already set via custom claims
-    let roleToSet = "REGISTERED";
-    if (isAdminCreatingForOther) {
-      try {
-        const targetUser = await auth.getUser(uid);
-        const customRole = targetUser.customClaims?.role as string | undefined;
-        if (customRole) {
-          roleToSet = customRole;
-        }
-      } catch (error) {
-        functions.logger.warn(`Could not fetch custom claims for ${uid}:`, error);
-      }
-    }
-
     await db.runTransaction(async (tx) => {
       const nameSnap = await tx.get(usernameRef);
       if (nameSnap.exists) {
@@ -157,22 +118,12 @@ export const claimUsername = functions.https.onCall(
       }
 
       tx.set(usernameRef, {uid});
-
-      // Create user profile with appropriate role
-      const userPayload: Record<string, string | number | boolean> = {
+      tx.set(userRef, {
         username: normalized,
         displayName: displayName || normalized,
+        role: "REGISTERED",
         createdAtSeconds: Math.floor(Date.now() / 1000),
-        role: roleToSet,
-      };
-
-      // Add admin-specific fields if role is admin
-      if (roleToSet === "admin") {
-        userPayload.needsVerificationOnFirstLogin = true;
-        userPayload.adminVerificationSent = false;
-      }
-
-      tx.set(userRef, userPayload);
+      });
 
       tx.set(publicRef, {
         username: normalized,
@@ -182,50 +133,6 @@ export const claimUsername = functions.https.onCall(
     });
 
     return {success: true};
-  }
-);
-
-/**
- * Finalize admin user creation by ensuring all required fields are set.
- * Called after Firebase Auth user is created but before profile setup.
- * Only callable by an admin or owner.
- */
-export const finalizeAdminUser = functions.https.onCall(
-  async (data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError("unauthenticated", "Login required");
-    }
-
-    const callerRole = context.auth.token.role;
-    if (callerRole !== "admin" && callerRole !== "owner") {
-      throw new functions.https.HttpsError("permission-denied", "Admin access required");
-    }
-
-    const {uid, role} = data ?? {};
-    if (typeof uid !== "string" || uid.trim().length === 0) {
-      throw new functions.https.HttpsError("invalid-argument", "User ID is required");
-    }
-
-    const targetUid = uid.trim();
-    const targetRole = (typeof role === "string" && role.trim().length > 0) ? role.trim() : "admin";
-
-    try {
-      // Verify user exists in Firebase Auth
-      await auth.getUser(targetUid);
-
-      // Set custom claims
-      await auth.setCustomUserClaims(targetUid, {role: targetRole});
-
-      functions.logger.info(`Finalized admin user: ${targetUid} with role: ${targetRole}`);
-
-      return {success: true, role: targetRole};
-    } catch (error) {
-      if (error instanceof functions.https.HttpsError) {
-        throw error;
-      }
-      functions.logger.error("Failed to finalize admin user:", error);
-      throw new functions.https.HttpsError("internal", "Failed to finalize admin user");
-    }
   }
 );
 
@@ -263,32 +170,14 @@ export const addAdminUser = functions.https.onCall(
 
       await auth.setCustomUserClaims(targetUid, {role: "admin"});
 
-      // Only update role and admin-specific fields, preserve existing user data
       const payload: Record<string, unknown> = {
         role: "admin",
         needsVerificationOnFirstLogin: true,
-        adminVerificationSent: false,
       };
-
-      // Only set displayName if provided AND user doesn't already have one
       if (typeof displayName === "string" && displayName.trim().length > 0) {
-        const userDoc = await db.collection("users").doc(targetUid).get();
-        if (!userDoc.exists || !userDoc.data()?.displayName) {
-          payload.displayName = displayName.trim();
-        }
+        (payload as {displayName?: string}).displayName = displayName.trim();
       }
-
-      // Log for debugging
-      functions.logger.info(`Setting admin role for UID: ${targetUid}`, payload);
-
       await db.collection("users").doc(targetUid).set(payload, {merge: true});
-
-      // Also update public_users if it exists (preserve existing data)
-      const publicUserRef = db.collection("public_users").doc(targetUid);
-      const publicUserDoc = await publicUserRef.get();
-      if (publicUserDoc.exists) {
-        await publicUserRef.set({role: "admin"}, {merge: true});
-      }
 
       return {success: true};
     } catch (error) {
@@ -350,6 +239,7 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
     }
 
     const uid = context.auth.uid;
+    const userRole = context.auth.token.role;
 
     try {
       const userRecord = await auth.getUser(uid);
@@ -357,8 +247,13 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
         return {shouldSend: false, message: ""};
       }
 
-      // Check database for role and verification status
-      // (can't rely on token.role on first login before token refresh)
+      // Check if user is an admin or owner
+      const isAdminOrOwner = userRole === "admin" || userRole === "owner";
+
+      if (!isAdminOrOwner) {
+        return {shouldSend: false, message: ""};
+      }
+
       const userRef = db.collection("users").doc(uid);
       let needsSend = false;
 
@@ -368,19 +263,10 @@ export const checkSendVerificationOnFirstLogin = functions.https.onCall(
           return;
         }
 
-        const data = doc.data();
-        const userRole = data?.role as string | undefined;
-        const needsVerification = data?.needsVerificationOnFirstLogin as boolean | undefined;
-        const verificationSent = data?.adminVerificationSent as boolean | undefined;
-
-        // Only send for admin/owner accounts that need verification and haven't been sent yet
-        const isAdminOrOwner = userRole === "admin" || userRole === "owner";
-        if (isAdminOrOwner && needsVerification && !verificationSent) {
+        const verificationSent = doc.data()?.adminVerificationSent as boolean | undefined;
+        if (!verificationSent) {
           needsSend = true;
-          tx.set(userRef, {
-            adminVerificationSent: true,
-            needsVerificationOnFirstLogin: false,
-          }, {merge: true});
+          tx.set(userRef, {adminVerificationSent: true}, {merge: true});
         }
       });
 
