@@ -1,6 +1,9 @@
 import * as functions from "firebase-functions/v1";
+import {defineSecret} from "firebase-functions/params";
 import {FieldValue} from "firebase-admin/firestore";
 import {db} from "./firebase";
+import * as https from "node:https";
+import type {IncomingMessage} from "node:http";
 
 // Helper function to add CORS headers
 const corsHeaders = {
@@ -26,6 +29,170 @@ export interface Review {
   description: string;
   createdAt: FieldValue;
   updatedAt: FieldValue;
+}
+
+interface ReviewModeration {
+  pg13: boolean;
+  sentiment: "positive" | "neutral" | "negative";
+  screenedAt: Date;
+  model: string;
+  version: number;
+}
+
+const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+
+function getGeminiApiKey(): string {
+  const key = GEMINI_API_KEY.value();
+  if (!key) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Gemini API key is not configured"
+    );
+  }
+  return key;
+}
+
+function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
+  const body = JSON.stringify({
+    contents: [{role: "user", parts: [{text: prompt}]}],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 256,
+    },
+  });
+
+  const options: https.RequestOptions = {
+    method: "POST",
+    hostname: "generativelanguage.googleapis.com",
+    path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res: IncomingMessage) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Gemini API error ${res.statusCode}: ${raw}`));
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw) as {
+            candidates?: Array<{content?: {parts?: Array<{text?: string}>}}>;
+          };
+          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            reject(new Error("Gemini response missing text"));
+            return;
+          }
+          resolve(text);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function extractJsonObject(text: string): Record<string, unknown> {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    throw new Error("No JSON object found in Gemini response");
+  }
+  return JSON.parse(match[0]);
+}
+
+async function analyzeReviewText(description: string): Promise<ReviewModeration> {
+  const apiKey = getGeminiApiKey();
+  const prompt = [
+    "You are a safety and sentiment classifier for user reviews.",
+    "Return ONLY valid JSON with keys: pg13 (boolean), sentiment (positive|neutral|negative).",
+    "A review is NOT pg13 if it includes slurs, vulgarities, profanities, or explicit content.",
+    "Do not repeat the input text. Do not include explanations.",
+    "Review:",
+    description,
+  ].join("\n");
+
+  const responseText = await callGeminiApi(apiKey, prompt);
+  const json = extractJsonObject(responseText) as {
+    pg13?: boolean;
+    sentiment?: "positive" | "neutral" | "negative";
+  };
+
+  if (typeof json.pg13 !== "boolean") {
+    throw new Error("Gemini response missing pg13 boolean");
+  }
+
+  const sentiment = json.sentiment ?? "neutral";
+  if (!(["positive", "neutral", "negative"] as const).includes(sentiment)) {
+    throw new Error("Gemini response has invalid sentiment");
+  }
+
+  return {
+    pg13: json.pg13,
+    sentiment,
+    screenedAt: new Date(),
+    model: GEMINI_MODEL,
+    version: 1,
+  };
+}
+
+async function ensureReviewModeration(
+  reviewId: string,
+  description: string,
+  existing?: ReviewModeration
+): Promise<ReviewModeration> {
+  if (existing?.pg13 !== undefined && existing?.sentiment) {
+    return {
+      pg13: existing.pg13,
+      sentiment: existing.sentiment,
+      screenedAt: existing.screenedAt ?? new Date(),
+      model: existing.model ?? GEMINI_MODEL,
+      version: existing.version ?? 1,
+    };
+  }
+
+  const moderation = await analyzeReviewText(description);
+  await db.collection("reviews").doc(reviewId).set(
+    {
+      moderation: {
+        pg13: moderation.pg13,
+        sentiment: moderation.sentiment,
+        screenedAt: moderation.screenedAt,
+        model: moderation.model,
+        version: moderation.version,
+      },
+      updatedAt: new Date(),
+    },
+    {merge: true}
+  );
+  return moderation;
+}
+
+async function getDisplayName(userId: string, anonymous?: boolean): Promise<string> {
+  if (anonymous) {
+    return "Customer Review";
+  }
+
+  try {
+    const publicUserDoc = await db.collection("public_users").doc(userId).get();
+    if (publicUserDoc.exists) {
+      return publicUserDoc.data()?.displayName || "Customer";
+    }
+  } catch (error) {
+    return "Customer";
+  }
+
+  return "Customer";
 }
 
 /**
@@ -95,7 +262,7 @@ export const addReview = functions.https.onCall(
  * Get all published reviews (paginated)
  * Public function - no authentication required
  */
-export const getReviews = functions.https.onCall(
+export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.onCall(
   async (data) => {
     const {limit = 10, offset = 0} = data ?? {};
 
@@ -107,12 +274,31 @@ export const getReviews = functions.https.onCall(
         .offset(offset)
         .get();
 
-      const reviews = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.(),
-        updatedAt: doc.data().updatedAt?.toDate?.(),
-      }));
+      const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        const moderation = await ensureReviewModeration(
+          doc.id,
+          data.description,
+          data.moderation
+        );
+
+        if (!moderation.pg13) {
+          return null;
+        }
+
+        const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
+
+        return {
+          id: doc.id,
+          rating: data.rating,
+          description: data.description,
+          userId: data.userId,
+          anonymous: data.anonymous ?? false,
+          displayName,
+          createdAt: data.createdAt?.toDate?.(),
+          updatedAt: data.updatedAt?.toDate?.(),
+        };
+      }))).filter((review) => review !== null);
 
       return {
         success: true,
@@ -169,7 +355,7 @@ export const getReviewStats = functions.https.onCall(
  * Public function - no authentication required
  * CORS enabled for web requests
  */
-export const getFiveStarReviews = functions.https.onRequest(
+export const getFiveStarReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.onRequest(
   async (req, res) => {
     // Handle CORS preflight
     if (req.method === "OPTIONS") {
@@ -192,22 +378,20 @@ export const getFiveStarReviews = functions.https.onRequest(
         .offset(offset)
         .get();
 
-      const reviews = await Promise.all(snapshot.docs.map(async (doc) => {
+      const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
-        let displayName = "Customer Review";
 
-        // If not anonymous, fetch the user's display name
-        if (!data.anonymous) {
-          try {
-            const publicUserDoc = await db.collection("public_users").doc(data.userId).get();
-            if (publicUserDoc.exists) {
-              displayName = publicUserDoc.data()?.displayName || "Customer";
-            }
-          } catch (error) {
-            // Fallback if user document doesn't exist
-            displayName = "Customer";
-          }
+        const moderation = await ensureReviewModeration(
+          doc.id,
+          data.description,
+          data.moderation
+        );
+
+        if (!moderation.pg13 || moderation.sentiment !== "positive") {
+          return null;
         }
+
+        const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
 
         return {
           id: doc.id,
@@ -218,7 +402,7 @@ export const getFiveStarReviews = functions.https.onRequest(
           displayName: displayName,
           createdAt: data.createdAt?.toDate?.(),
         };
-      }));
+      }))).filter((review) => review !== null);
 
       res.json({
         success: true,
