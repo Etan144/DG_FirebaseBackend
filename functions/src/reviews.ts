@@ -42,6 +42,9 @@ interface ReviewModeration {
 const GEMINI_MODEL = "gemini-1.5-flash";
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
+/**
+ * Returns the configured Gemini API key from secrets.
+ */
 function getGeminiApiKey(): string {
   const key = GEMINI_API_KEY.value();
   if (!key) {
@@ -53,6 +56,12 @@ function getGeminiApiKey(): string {
   return key;
 }
 
+/**
+ * Calls the Gemini API with the provided prompt.
+ * @param {string} apiKey - Gemini API key
+ * @param {string} prompt - Prompt to send
+ * @returns {Promise<string>} - Raw text response from Gemini
+ */
 function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
   const body = JSON.stringify({
     contents: [{role: "user", parts: [{text: prompt}]}],
@@ -103,6 +112,11 @@ function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
   });
 }
 
+/**
+ * Extracts the first JSON object from a text response.
+ * @param {string} text - Text containing JSON
+ * @returns {Record<string, unknown>} - Parsed JSON object
+ */
 function extractJsonObject(text: string): Record<string, unknown> {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) {
@@ -111,6 +125,11 @@ function extractJsonObject(text: string): Record<string, unknown> {
   return JSON.parse(match[0]);
 }
 
+/**
+ * Runs sentiment and PG-13 screening on review text.
+ * @param {string} description - Review text
+ * @returns {Promise<ReviewModeration>} - Moderation result
+ */
 async function analyzeReviewText(description: string): Promise<ReviewModeration> {
   const apiKey = getGeminiApiKey();
   const prompt = [
@@ -146,6 +165,13 @@ async function analyzeReviewText(description: string): Promise<ReviewModeration>
   };
 }
 
+/**
+ * Returns moderation for a review, computing and caching if missing.
+ * @param {string} reviewId - Firestore review document id
+ * @param {string} description - Review text
+ * @param {ReviewModeration} [existing] - Existing moderation if present
+ * @returns {Promise<ReviewModeration>} - Moderation result
+ */
 async function ensureReviewModeration(
   reviewId: string,
   description: string,
@@ -178,6 +204,12 @@ async function ensureReviewModeration(
   return moderation;
 }
 
+/**
+ * Returns a display name for the review author.
+ * @param {string} userId - Review author user id
+ * @param {boolean} [anonymous] - Whether the review is anonymous
+ * @returns {Promise<string>} - Display name
+ */
 async function getDisplayName(userId: string, anonymous?: boolean): Promise<string> {
   if (anonymous) {
     return "Customer Review";
