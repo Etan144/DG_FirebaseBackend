@@ -75,7 +75,7 @@ function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
   const options: https.RequestOptions = {
     method: "POST",
     hostname: "generativelanguage.googleapis.com",
-    path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    path: `/v1/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
     headers: {
       "Content-Type": "application/json",
       "Content-Length": Buffer.byteLength(body),

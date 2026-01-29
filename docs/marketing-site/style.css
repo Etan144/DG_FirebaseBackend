@@ -133,6 +133,8 @@
     /* Review Slider */
     .review-slider {
       text-align: center;
+      position: relative;
+      padding-bottom: 64px;
     }
     .review-slider h2 {
       margin-bottom: 30px;
@@ -190,9 +192,10 @@
     }
 
     .reviews-cta {
+      position: absolute;
+      right: 22px;
+      bottom: 18px;
       display: flex;
-      justify-content: flex-end;
-      margin-top: 16px;
     }
 
     /* Video Section */
