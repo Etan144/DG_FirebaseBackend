@@ -36,7 +36,10 @@ function createReviewCard(review) {
   }
 
   const reviewText = document.createElement("p");
-  reviewText.textContent = `"${review.description}"`;
+  const description = review.description && review.description.trim().length > 0
+    ? review.description
+    : "No comment provided.";
+  reviewText.textContent = `"${description}"`;
 
   const userInfo = document.createElement("strong");
   const dateString = review.createdAt
@@ -78,9 +81,9 @@ async function loadReviews() {
         reviewsContainer.appendChild(card);
       });
 
-      offset += data.reviews.length;
+      offset = typeof data.nextOffset === "number" ? data.nextOffset : (offset + data.reviews.length);
 
-      if (data.reviews.length < limit) {
+      if (data.hasMore === false) {
         loadMoreBtn.style.display = "none";
       } else {
         loadMoreBtn.style.display = "inline-flex";

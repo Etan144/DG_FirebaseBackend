@@ -96,7 +96,7 @@ async function loadFiveStarReviews() {
     } else {
       // Show message if no 5-star reviews
       if (loadingCard) {
-        loadingCard.innerHTML = '<p>No 5-star reviews yet. Be the first to share your experience!</p>';
+        loadingCard.innerHTML = '<p>No reviews yet. Be the first to share your experience!</p>';
       }
     }
   } catch (error) {
@@ -125,7 +125,10 @@ function createReviewCard(review) {
 
   // Create review text
   const reviewText = document.createElement('p');
-  reviewText.textContent = `"${review.description}"`;
+  const description = review.description && review.description.trim().length > 0
+    ? review.description
+    : "No comment provided.";
+  reviewText.textContent = `"${description}"`;
 
   // Create user info (show "Customer Review" or username based on anonymous flag)
   const userInfo = document.createElement('strong');

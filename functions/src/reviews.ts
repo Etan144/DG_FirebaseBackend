@@ -33,14 +33,21 @@ export interface Review {
 
 interface ReviewModeration {
   pg13: boolean;
-  sentiment: "positive" | "neutral" | "negative";
+  sentiment?: "positive" | "neutral" | "negative";
   screenedAt: Date;
   model: string;
   version: number;
 }
 
-const GEMINI_MODEL = "gemini-1.5-flash-latest";
+const GEMINI_MODEL_CANDIDATES = [
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro-002",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+];
+let cachedGeminiModel: {name: string; expiresAt: number} | null = null;
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+const BYPASS_REVIEW_MODERATION = false;
 
 /**
  * Returns the configured Gemini API key from secrets.
@@ -58,31 +65,18 @@ function getGeminiApiKey(): string {
 }
 
 /**
- * Calls the Gemini API with the provided prompt.
+ * Lists available Gemini models for generateContent.
  * @param {string} apiKey - Gemini API key
- * @param {string} prompt - Prompt to send
- * @return {Promise<string>} Raw text response from Gemini
+ * @return {Promise<string[]>} Model names
  */
-function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
-  const body = JSON.stringify({
-    contents: [{role: "user", parts: [{text: prompt}]}],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 256,
-    },
-  });
-
+async function listGeminiModels(apiKey: string): Promise<string[]> {
   const options: https.RequestOptions = {
-    method: "POST",
+    method: "GET",
     hostname: "generativelanguage.googleapis.com",
-    path: `/v1/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(body),
-    },
+    path: `/v1beta/models?key=${encodeURIComponent(apiKey)}`,
   };
 
-  return new Promise((resolve, reject) => {
+  const responseText = await new Promise<string>((resolve, reject) => {
     const req = https.request(options, (res: IncomingMessage) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
@@ -92,25 +86,109 @@ function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
           reject(new Error(`Gemini API error ${res.statusCode}: ${raw}`));
           return;
         }
-        try {
-          const parsed = JSON.parse(raw) as {
-            candidates?: Array<{content?: {parts?: Array<{text?: string}>}}>;
-          };
-          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text) {
-            reject(new Error("Gemini response missing text"));
-            return;
-          }
-          resolve(text);
-        } catch (error) {
-          reject(error);
+        resolve(raw);
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+
+  const parsed = JSON.parse(responseText) as {
+    models?: Array<{name?: string; supportedGenerationMethods?: string[]}>;
+  };
+
+  return (parsed.models ?? [])
+    .filter((model) => model.supportedGenerationMethods?.includes("generateContent"))
+    .map((model) => model.name)
+    .filter((name): name is string => typeof name === "string");
+}
+
+/**
+ * Selects a valid Gemini model name, cached for 10 minutes.
+ * @param {string} apiKey - Gemini API key
+ * @return {Promise<string>} Model name
+ */
+async function selectGeminiModel(apiKey: string): Promise<string> {
+  const now = Date.now();
+  if (cachedGeminiModel && cachedGeminiModel.expiresAt > now) {
+    return cachedGeminiModel.name;
+  }
+
+  const available = await listGeminiModels(apiKey);
+  const preferred = GEMINI_MODEL_CANDIDATES.find((candidate) =>
+    available.includes(`models/${candidate}`)
+  );
+
+  const selected = preferred ?? available[0];
+  if (!selected) {
+    throw new Error("No Gemini models available for generateContent");
+  }
+
+  cachedGeminiModel = {
+    name: selected.replace(/^models\//, ""),
+    expiresAt: now + 10 * 60 * 1000,
+  };
+
+  return cachedGeminiModel.name;
+}
+
+/**
+ * Calls the Gemini API with the provided prompt.
+ * Falls back across model candidates when a model is unavailable.
+ * @param {string} apiKey - Gemini API key
+ * @param {string} prompt - Prompt to send
+ * @return {Promise<{text: string, model: string}>} Response text and model used
+ */
+async function callGeminiApi(
+  apiKey: string,
+  prompt: string
+): Promise<{text: string; model: string}> {
+  const body = JSON.stringify({
+    contents: [{role: "user", parts: [{text: prompt}]}],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 256,
+      responseMimeType: "application/json",
+    },
+  });
+
+  const model = await selectGeminiModel(apiKey);
+  const options: https.RequestOptions = {
+    method: "POST",
+    hostname: "generativelanguage.googleapis.com",
+    path: `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
+  };
+
+  const responseText = await new Promise<string>((resolve, reject) => {
+    const req = https.request(options, (res: IncomingMessage) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Gemini API error ${res.statusCode}: ${raw}`));
+          return;
         }
+        resolve(raw);
       });
     });
     req.on("error", reject);
     req.write(body);
     req.end();
   });
+
+  const parsed = JSON.parse(responseText) as {
+    candidates?: Array<{content?: {parts?: Array<{text?: string}>}}>;
+  };
+  const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error("Gemini response missing text");
+  }
+  return {text, model};
 }
 
 /**
@@ -119,31 +197,45 @@ function callGeminiApi(apiKey: string, prompt: string): Promise<string> {
  * @return {Record<string, unknown>} Parsed JSON object
  */
 function extractJsonObject(text: string): Record<string, unknown> {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    throw new Error("No JSON object found in Gemini response");
+  try {
+    const direct = JSON.parse(text) as Record<string, unknown> | string;
+    if (typeof direct === "string") {
+      return JSON.parse(direct) as Record<string, unknown>;
+    }
+    return direct;
+  } catch (error) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("No JSON object found in Gemini response");
+    }
+    return JSON.parse(match[0]);
   }
-  return JSON.parse(match[0]);
 }
 
 /**
- * Runs sentiment and PG-13 screening on review text.
+ * Runs PG-13 screening (and optional sentiment) on review text.
  * @param {string} description - Review text
+ * @param {boolean} includeSentiment - Whether to request sentiment
  * @return {Promise<ReviewModeration>} Moderation result
  */
-async function analyzeReviewText(description: string): Promise<ReviewModeration> {
+async function analyzeReviewText(
+  description: string,
+  includeSentiment: boolean
+): Promise<ReviewModeration> {
   const apiKey = getGeminiApiKey();
   const prompt = [
     "You are a safety and sentiment classifier for user reviews.",
-    "Return ONLY valid JSON with keys: pg13 (boolean), sentiment (positive|neutral|negative).",
-    "A review is NOT pg13 if it includes slurs, vulgarities, profanities, or explicit content.",
+    includeSentiment ? "Return ONLY valid JSON with keys: pg13 (boolean), sentiment (positive|neutral|negative)." : "Return ONLY valid JSON with keys: pg13 (boolean).",
+    "A review is NOT pg13 ONLY if it includes clear slurs, vulgarities, profanities, or explicit content.",
+    "If sentiment is requested, label negative only when the review clearly criticizes or bashes the app.",
     "Do not repeat the input text. Do not include explanations.",
+    "Do not wrap the JSON in markdown or code fences.",
     "Review:",
     description,
   ].join("\n");
 
-  const responseText = await callGeminiApi(apiKey, prompt);
-  const json = extractJsonObject(responseText) as {
+  const response = await callGeminiApi(apiKey, prompt);
+  const json = extractJsonObject(response.text) as {
     pg13?: boolean;
     sentiment?: "positive" | "neutral" | "negative";
   };
@@ -152,16 +244,19 @@ async function analyzeReviewText(description: string): Promise<ReviewModeration>
     throw new Error("Gemini response missing pg13 boolean");
   }
 
-  const sentiment = json.sentiment ?? "neutral";
-  if (!(["positive", "neutral", "negative"] as const).includes(sentiment)) {
-    throw new Error("Gemini response has invalid sentiment");
+  let sentiment: "positive" | "neutral" | "negative" | undefined;
+  if (includeSentiment) {
+    sentiment = json.sentiment ?? "neutral";
+    if (!(["positive", "neutral", "negative"] as const).includes(sentiment)) {
+      throw new Error("Gemini response has invalid sentiment");
+    }
   }
 
   return {
     pg13: json.pg13,
     sentiment,
     screenedAt: new Date(),
-    model: GEMINI_MODEL,
+    model: response.model,
     version: 1,
   };
 }
@@ -170,25 +265,27 @@ async function analyzeReviewText(description: string): Promise<ReviewModeration>
  * Returns moderation for a review, computing and caching if missing.
  * @param {string} reviewId - Firestore review document id
  * @param {string} description - Review text
+ * @param {boolean} requireSentiment - Whether sentiment is required
  * @param {ReviewModeration} [existing] - Existing moderation if present
  * @return {Promise<ReviewModeration>} Moderation result
  */
 async function ensureReviewModeration(
   reviewId: string,
   description: string,
+  requireSentiment: boolean,
   existing?: ReviewModeration
 ): Promise<ReviewModeration> {
-  if (existing?.pg13 !== undefined && existing?.sentiment) {
+  if (existing?.pg13 !== undefined && (!requireSentiment || existing.sentiment)) {
     return {
       pg13: existing.pg13,
       sentiment: existing.sentiment,
       screenedAt: existing.screenedAt ?? new Date(),
-      model: existing.model ?? GEMINI_MODEL,
+      model: existing.model ?? GEMINI_MODEL_CANDIDATES[0],
       version: existing.version ?? 1,
     };
   }
 
-  const moderation = await analyzeReviewText(description);
+  const moderation = await analyzeReviewText(description, requireSentiment);
   await db.collection("reviews").doc(reviewId).set(
     {
       moderation: {
@@ -307,21 +404,27 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
         .offset(offset)
         .get();
 
+      const scannedCount = snapshot.size;
+      const nextOffset = offset + scannedCount;
+
       const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
         try {
-          if (typeof data.description !== "string") {
-            return null;
-          }
+          const descriptionText = typeof data.description === "string" ? data.description.trim() : "";
 
-          const moderation = await ensureReviewModeration(
-            doc.id,
-            data.description,
-            data.moderation
-          );
+          if (!BYPASS_REVIEW_MODERATION) {
+            if (descriptionText.length > 0) {
+              const moderation = await ensureReviewModeration(
+                doc.id,
+                descriptionText,
+                false,
+                data.moderation
+              );
 
-          if (!moderation.pg13) {
-            return null;
+              if (!moderation.pg13) {
+                return null;
+              }
+            }
           }
 
           const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
@@ -329,7 +432,7 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
           return {
             id: doc.id,
             rating: data.rating,
-            description: data.description,
+            description: descriptionText,
             userId: data.userId,
             anonymous: data.anonymous ?? false,
             displayName,
@@ -346,6 +449,9 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
         success: true,
         reviews,
         count: reviews.length,
+        scannedCount,
+        nextOffset,
+        hasMore: scannedCount === limit,
       };
     } catch (error) {
       console.error("Failed to retrieve reviews", error);
@@ -353,6 +459,9 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
         success: false,
         reviews: [],
         count: 0,
+        scannedCount: 0,
+        nextOffset: offset,
+        hasMore: false,
         error: "Failed to retrieve reviews",
       };
     }
@@ -426,18 +535,23 @@ export const getFiveStarReviews = functions.runWith({secrets: [GEMINI_API_KEY]})
       const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
         try {
-          if (typeof data.description !== "string") {
+          const descriptionText = typeof data.description === "string" ? data.description.trim() : "";
+
+          if (descriptionText.length === 0) {
             return null;
           }
 
-          const moderation = await ensureReviewModeration(
-            doc.id,
-            data.description,
-            data.moderation
-          );
+          if (!BYPASS_REVIEW_MODERATION) {
+            const moderation = await ensureReviewModeration(
+              doc.id,
+              descriptionText,
+              true,
+              data.moderation
+            );
 
-          if (!moderation.pg13 || moderation.sentiment !== "positive") {
-            return null;
+            if (!moderation.pg13 || moderation.sentiment !== "positive") {
+              return null;
+            }
           }
 
           const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
@@ -445,7 +559,7 @@ export const getFiveStarReviews = functions.runWith({secrets: [GEMINI_API_KEY]})
           return {
             id: doc.id,
             rating: data.rating,
-            description: data.description,
+            description: descriptionText,
             userId: data.userId,
             anonymous: data.anonymous ?? false,
             displayName: displayName,
