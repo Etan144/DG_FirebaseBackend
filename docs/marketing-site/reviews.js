@@ -24,14 +24,19 @@ window.auth = auth;
 window.db = db;
 
 /**
- * Shuffle array using seeded random based on date (same shuffle daily)
+ * Shuffle array using seeded random based on time (same shuffle each minute)
  * @param {Array} array - Array to shuffle
  * @returns {Array} - Shuffled array
  */
 function shuffleArrayDaily(array) {
-  // Create a seeded random using today's date
+  // Create a seeded random using current date + time (minute-level)
   const today = new Date();
-  const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  const seed =
+    today.getFullYear() * 100000000 +
+    (today.getMonth() + 1) * 1000000 +
+    today.getDate() * 10000 +
+    today.getHours() * 100 +
+    today.getMinutes();
   
   // Simple seeded pseudo-random generator
   let rng = seed;
