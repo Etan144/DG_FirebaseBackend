@@ -39,7 +39,7 @@ interface ReviewModeration {
   version: number;
 }
 
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-1.5-flash-latest";
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
 /**
@@ -309,28 +309,37 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
 
       const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
-        const moderation = await ensureReviewModeration(
-          doc.id,
-          data.description,
-          data.moderation
-        );
+        try {
+          if (typeof data.description !== "string") {
+            return null;
+          }
 
-        if (!moderation.pg13) {
+          const moderation = await ensureReviewModeration(
+            doc.id,
+            data.description,
+            data.moderation
+          );
+
+          if (!moderation.pg13) {
+            return null;
+          }
+
+          const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
+
+          return {
+            id: doc.id,
+            rating: data.rating,
+            description: data.description,
+            userId: data.userId,
+            anonymous: data.anonymous ?? false,
+            displayName,
+            createdAt: data.createdAt?.toDate?.(),
+            updatedAt: data.updatedAt?.toDate?.(),
+          };
+        } catch (error) {
+          console.error("Review moderation failed", {reviewId: doc.id, error});
           return null;
         }
-
-        const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
-
-        return {
-          id: doc.id,
-          rating: data.rating,
-          description: data.description,
-          userId: data.userId,
-          anonymous: data.anonymous ?? false,
-          displayName,
-          createdAt: data.createdAt?.toDate?.(),
-          updatedAt: data.updatedAt?.toDate?.(),
-        };
       }))).filter((review) => review !== null);
 
       return {
@@ -339,10 +348,13 @@ export const getReviews = functions.runWith({secrets: [GEMINI_API_KEY]}).https.o
         count: reviews.length,
       };
     } catch (error) {
-      throw new functions.https.HttpsError(
-        "internal",
-        "Failed to retrieve reviews"
-      );
+      console.error("Failed to retrieve reviews", error);
+      return {
+        success: false,
+        reviews: [],
+        count: 0,
+        error: "Failed to retrieve reviews",
+      };
     }
   }
 );
@@ -413,28 +425,36 @@ export const getFiveStarReviews = functions.runWith({secrets: [GEMINI_API_KEY]})
 
       const reviews = (await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
+        try {
+          if (typeof data.description !== "string") {
+            return null;
+          }
 
-        const moderation = await ensureReviewModeration(
-          doc.id,
-          data.description,
-          data.moderation
-        );
+          const moderation = await ensureReviewModeration(
+            doc.id,
+            data.description,
+            data.moderation
+          );
 
-        if (!moderation.pg13 || moderation.sentiment !== "positive") {
+          if (!moderation.pg13 || moderation.sentiment !== "positive") {
+            return null;
+          }
+
+          const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
+
+          return {
+            id: doc.id,
+            rating: data.rating,
+            description: data.description,
+            userId: data.userId,
+            anonymous: data.anonymous ?? false,
+            displayName: displayName,
+            createdAt: data.createdAt?.toDate?.(),
+          };
+        } catch (error) {
+          console.error("Review moderation failed", {reviewId: doc.id, error});
           return null;
         }
-
-        const displayName = await getDisplayName(data.userId, data.anonymous ?? false);
-
-        return {
-          id: doc.id,
-          rating: data.rating,
-          description: data.description,
-          userId: data.userId,
-          anonymous: data.anonymous ?? false,
-          displayName: displayName,
-          createdAt: data.createdAt?.toDate?.(),
-        };
       }))).filter((review) => review !== null);
 
       res.json({
@@ -444,8 +464,10 @@ export const getFiveStarReviews = functions.runWith({secrets: [GEMINI_API_KEY]})
       });
     } catch (error) {
       console.error(error);
-      res.status(500).json({
+      res.status(200).json({
         success: false,
+        reviews: [],
+        count: 0,
         error: "Failed to retrieve 5-star reviews",
       });
     }
