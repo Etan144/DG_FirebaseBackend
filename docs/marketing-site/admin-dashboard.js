@@ -23,12 +23,15 @@ const functions = getFunctions(app);
 const db = getFirestore(app);
 
 /* =========================
-   DOM ELEMENTS
+   DOM
 ========================= */
 const userIconContainer = document.getElementById("user-icon-container");
-const statsWrap = document.getElementById("stats-dashboard");
 const usersTbody = document.getElementById("users-tbody");
 const reviewsWrap = document.getElementById("reviews-list");
+
+const statsOverview = document.getElementById("stats-overview");
+const statsUsers = document.getElementById("stats-users");
+const statsReviews = document.getElementById("stats-reviews");
 
 const userSearchInput = document.getElementById("userSearch");
 const reviewSearchInput = document.getElementById("reviewSearch");
@@ -41,7 +44,7 @@ let cachedUsers = [];
 let cachedReviews = [];
 
 /* =========================
-   HEADER DROPDOWN
+   HEADER
 ========================= */
 function renderUserDropdown(user) {
   userIconContainer.innerHTML = `
@@ -70,30 +73,16 @@ function renderUserDropdown(user) {
 }
 
 /* =========================
-   STATS
-========================= */
-function renderStatsSkeleton() {
-  statsWrap.innerHTML = `
-    ${StatCard({ id: "stat-users", label: "Total Users", value: "—" })}
-    ${StatCard({ id: "stat-active-users", label: "Active Users", value: "—" })}
-    ${StatCard({ id: "stat-reviews", label: "Reviews", value: "—" })}
-  `;
-}
-
-/* =========================
    HELPERS
 ========================= */
 function normalizeCreatedAt(createdAt) {
   if (!createdAt) return null;
-
   if (typeof createdAt === "object" && typeof createdAt.seconds === "number") {
     return createdAt.seconds * 1000;
   }
-
   if (typeof createdAt === "number") {
     return createdAt < 1e12 ? createdAt * 1000 : createdAt;
   }
-
   const d = new Date(createdAt);
   return isNaN(d.getTime()) ? null : d.getTime();
 }
@@ -109,24 +98,66 @@ function renderReviews(reviews) {
 }
 
 /* =========================
+   STATS
+========================= */
+function renderUserStats() {
+  const total = cachedUsers.length;
+  const active = cachedUsers.filter(u => !u.disabled).length;
+  const disabled = total - active;
+
+  const now = Date.now();
+  const last7Days = cachedUsers.filter(u =>
+    u.creationTime && new Date(u.creationTime).getTime() > now - 7 * 86400000
+  ).length;
+
+  statsUsers.innerHTML = `
+    ${StatCard({ label: "Total Users", value: total })}
+    ${StatCard({ label: "Active Users", value: active })}
+    ${StatCard({ label: "Disabled Users", value: disabled })}
+    ${StatCard({ label: "New (7 days)", value: last7Days })}
+  `;
+}
+
+function renderReviewStats() {
+  const total = cachedReviews.length;
+  const avg =
+    total > 0
+      ? (cachedReviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(2)
+      : "—";
+
+  const low = cachedReviews.filter(r => r.rating <= 2).length;
+  const positive = cachedReviews.filter(r => r.rating >= 4).length;
+
+  statsReviews.innerHTML = `
+    ${StatCard({ label: "Total Reviews", value: total })}
+    ${StatCard({ label: "Average Rating", value: avg })}
+    ${StatCard({ label: "Low Ratings (≤2⭐)", value: low })}
+    ${StatCard({ label: "Positive Reviews", value: positive })}
+  `;
+}
+
+function renderOverviewStats() {
+  statsOverview.innerHTML = `
+    ${StatCard({ label: "Users", value: cachedUsers.length })}
+    ${StatCard({ label: "Reviews", value: cachedReviews.length })}
+  `;
+}
+
+/* =========================
    USERS
 ========================= */
 async function loadUsers() {
   const listUsers = httpsCallable(functions, "listUsers");
   const res = await listUsers();
   cachedUsers = Array.isArray(res.data) ? res.data : [];
-
-  document.getElementById("stat-users").textContent = cachedUsers.length;
-  document.getElementById("stat-active-users").textContent =
-    cachedUsers.filter(u => !u.disabled).length;
-
   renderUsers(cachedUsers);
+  renderUserStats();
+  renderOverviewStats();
 }
 
 userSearchInput.addEventListener("input", () => {
   const q = userSearchInput.value.toLowerCase();
-  renderUsers(
-    cachedUsers.filter(u => (u.email || "").toLowerCase().includes(q)));
+  renderUsers(cachedUsers.filter(u => (u.email || "").toLowerCase().includes(q)));
 });
 
 /* =========================
@@ -148,7 +179,8 @@ async function loadReviews() {
     });
   });
 
-  document.getElementById("stat-reviews").textContent = cachedReviews.length;
+  renderReviewStats();
+  renderOverviewStats();
   applyReviewFilters();
 }
 
@@ -156,12 +188,12 @@ function applyReviewFilters() {
   const minRating = Number(reviewRatingFilter.value || 0);
   const keyword = reviewSearchInput.value.toLowerCase();
 
-  const filtered = cachedReviews.filter(r =>
-    r.rating >= minRating &&
-    (!keyword || r.description.toLowerCase().includes(keyword))
+  renderReviews(
+    cachedReviews.filter(r =>
+      r.rating >= minRating &&
+      (!keyword || r.description.toLowerCase().includes(keyword))
+    )
   );
-
-  renderReviews(filtered);
 }
 
 reviewRatingFilter.addEventListener("change", applyReviewFilters);
@@ -170,8 +202,6 @@ reviewSearchInput.addEventListener("input", applyReviewFilters);
 /* =========================
    AUTH
 ========================= */
-renderStatsSkeleton();
-
 onAuthStateChanged(auth, async user => {
   if (!user) {
     window.location.href = "LoginPage.html";

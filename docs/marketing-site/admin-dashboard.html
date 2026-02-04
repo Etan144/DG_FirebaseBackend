@@ -5,14 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard | Deepfake Guard</title>
 
-  <!-- Global theme -->
   <link rel="stylesheet" href="style.css" />
-  <!-- Admin layout -->
   <link rel="stylesheet" href="admin-dashboard.css" />
 </head>
 
 <body class="admin-page">
   <div class="admin-container">
+
     <header class="admin-header">
       <a href="index.html" class="admin-brand">
         <div class="admin-logo">DG</div>
@@ -26,11 +25,20 @@
 
     <div class="admin-page-header">
       <h1>Admin Dashboard</h1>
-      <p>Overview of platform activity and moderation tools.</p>
+      <p>Platform overview, moderation and health metrics.</p>
     </div>
 
-    <!-- STATS -->
-    <div class="stats-dashboard" id="stats-dashboard"></div>
+    <!-- OVERVIEW STATS -->
+    <h3 class="section-title">Overview</h3>
+    <div class="stats-dashboard" id="stats-overview"></div>
+
+    <!-- USER STATS -->
+    <h3 class="section-title">User Accounts</h3>
+    <div class="stats-dashboard" id="stats-users"></div>
+
+    <!-- REVIEW STATS -->
+    <h3 class="section-title">User Reviews</h3>
+    <div class="stats-dashboard" id="stats-reviews"></div>
 
     <!-- USER MANAGEMENT -->
     <section class="admin-section">
@@ -66,14 +74,7 @@
 
       <div class="section-body">
         <div class="toolbar">
-          <input
-            id="reviewSearch"
-            type="text"
-            class="filter-select"
-            placeholder="🔍 Search review text"
-            style="min-width:220px"
-          />
-
+          <input id="reviewSearch" class="filter-select" placeholder="🔍 Search review text" />
           <select id="reviewRatingFilter" class="filter-select">
             <option value="">All Ratings</option>
             <option value="5">⭐⭐⭐⭐⭐</option>
@@ -93,6 +94,6 @@
     </footer>
   </div>
 
-  <script type="module" src="admin-dashboard.js?v=5"></script>
+  <script type="module" src="admin-dashboard.js?v=6"></script>
 </body>
 </html>
