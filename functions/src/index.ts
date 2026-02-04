@@ -22,7 +22,8 @@ export {
   fixAdminUsername,
 } from "./auth";
 export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
-
+export {listUsers, setUserDisabled, deleteUser} from "./adminUsers";
+export {deleteReview as adminDeleteReview} from "./adminReviews";
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript

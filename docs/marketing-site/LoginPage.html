@@ -142,7 +142,17 @@
         feedback.style.color = "var(--accent)";
 
         setTimeout(() => {
-          window.location.href = "download.html";
+          // Check for admin custom claim
+          cred.user.getIdTokenResult().then((idTokenResult) => {
+            if (idTokenResult.claims.admin) {
+              window.location.href = "admin-dashboard.html";
+            } else {
+              window.location.href = "download.html";
+            }
+          }).catch(() => {
+            // fallback to normal user
+            window.location.href = "download.html";
+          });
         }, 1000);
 
       } catch (err) {
