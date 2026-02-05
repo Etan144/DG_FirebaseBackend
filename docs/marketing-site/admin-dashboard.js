@@ -37,16 +37,22 @@ const userSearchInput = document.getElementById("userSearch");
 const reviewSearchInput = document.getElementById("reviewSearch");
 const reviewRatingFilter = document.getElementById("reviewRatingFilter");
 
+const auditTbody = document.getElementById("audit-tbody");
+const auditSearchInput = document.getElementById("auditSearch");
+
 /* =========================
    STATE
 ========================= */
 let cachedUsers = [];
 let cachedReviews = [];
+let cachedAudit = [];
 
 /* =========================
    HEADER
 ========================= */
 function renderUserDropdown(user) {
+  if (!userIconContainer) return;
+
   userIconContainer.innerHTML = `
     <div class="user-dropdown" id="userDropdown">
       <span style="font-size:13px;color:var(--muted);">${user.email}</span>
@@ -57,19 +63,25 @@ function renderUserDropdown(user) {
     </div>
   `;
 
-  document.getElementById("userIconClickable").onclick = e => {
-    e.stopPropagation();
-    document.getElementById("userDropdown").classList.toggle("show");
-  };
+  const icon = document.getElementById("userIconClickable");
+  const dropdown = document.getElementById("userDropdown");
 
-  document.addEventListener("click", () =>
-    document.getElementById("userDropdown").classList.remove("show")
-  );
+  if (icon && dropdown) {
+    icon.onclick = e => {
+      e.stopPropagation();
+      dropdown.classList.toggle("show");
+    };
 
-  document.getElementById("logoutBtn").onclick = async () => {
-    await signOut(auth);
-    window.location.href = "LoginPage.html";
-  };
+    document.addEventListener("click", () => dropdown.classList.remove("show"));
+  }
+
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) {
+    logoutBtn.onclick = async () => {
+      await signOut(auth);
+      window.location.href = "LoginPage.html";
+    };
+  }
 }
 
 /* =========================
@@ -88,58 +100,78 @@ function normalizeCreatedAt(createdAt) {
 }
 
 function renderUsers(users) {
+  if (!usersTbody) return;
   usersTbody.innerHTML = users.map(UserRow).join("");
 }
 
 function renderReviews(reviews) {
+  if (!reviewsWrap) return;
   reviewsWrap.innerHTML = reviews.length
     ? reviews.map(ReviewCard).join("")
     : `<div style="color:var(--muted);">No matching reviews.</div>`;
 }
 
 /* =========================
+   AUDIT LOG RENDER
+========================= */
+function renderAudit(logs) {
+  if (!auditTbody) return;
+
+  auditTbody.innerHTML = logs.map(l => {
+    const time = l.createdAt?.seconds
+      ? new Date(l.createdAt.seconds * 1000).toLocaleString()
+      : "";
+
+    return `
+      <tr>
+        <td>${time}</td>
+        <td>${l.actorEmail || l.actorUid || ""}</td>
+        <td>${l.action || ""}</td>
+        <td>${l.targetType || ""}:${l.targetId || ""}</td>
+        <td>${JSON.stringify(l.metadata || {})}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+/* =========================
    STATS
 ========================= */
 function renderUserStats() {
+  if (!statsUsers) return;
+
   const total = cachedUsers.length;
   const active = cachedUsers.filter(u => !u.disabled).length;
   const disabled = total - active;
-
-  const now = Date.now();
-  const last7Days = cachedUsers.filter(u =>
-    u.creationTime && new Date(u.creationTime).getTime() > now - 7 * 86400000
-  ).length;
 
   statsUsers.innerHTML = `
     ${StatCard({ label: "Total Users", value: total })}
     ${StatCard({ label: "Active Users", value: active })}
     ${StatCard({ label: "Disabled Users", value: disabled })}
-    ${StatCard({ label: "New (7 days)", value: last7Days })}
   `;
 }
 
 function renderReviewStats() {
-  const total = cachedReviews.length;
-  const avg =
-    total > 0
-      ? (cachedReviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(2)
-      : "—";
+  if (!statsReviews) return;
 
-  const low = cachedReviews.filter(r => r.rating <= 2).length;
-  const positive = cachedReviews.filter(r => r.rating >= 4).length;
+  const total = cachedReviews.length;
+  const avg = total
+    ? (cachedReviews.reduce((s,r)=>s+r.rating,0)/total).toFixed(2)
+    : "—";
 
   statsReviews.innerHTML = `
     ${StatCard({ label: "Total Reviews", value: total })}
     ${StatCard({ label: "Average Rating", value: avg })}
-    ${StatCard({ label: "Low Ratings (≤2⭐)", value: low })}
-    ${StatCard({ label: "Positive Reviews", value: positive })}
   `;
 }
 
 function renderOverviewStats() {
+  if (!statsOverview) return;
+
   statsOverview.innerHTML = `
     ${StatCard({ label: "Users", value: cachedUsers.length })}
     ${StatCard({ label: "Reviews", value: cachedReviews.length })}
+    ${StatCard({ label: "Audit Logs", value: cachedAudit.length })}
   `;
 }
 
@@ -155,9 +187,13 @@ async function loadUsers() {
   renderOverviewStats();
 }
 
-userSearchInput.addEventListener("input", () => {
+userSearchInput?.addEventListener("input", () => {
   const q = userSearchInput.value.toLowerCase();
-  renderUsers(cachedUsers.filter(u => (u.email || "").toLowerCase().includes(q)));
+  renderUsers(
+    cachedUsers.filter(u =>
+      (u.email || "").toLowerCase().includes(q)
+    )
+  );
 });
 
 /* =========================
@@ -185,8 +221,8 @@ async function loadReviews() {
 }
 
 function applyReviewFilters() {
-  const minRating = Number(reviewRatingFilter.value || 0);
-  const keyword = reviewSearchInput.value.toLowerCase();
+  const minRating = Number(reviewRatingFilter?.value || 0);
+  const keyword = reviewSearchInput?.value.toLowerCase() || "";
 
   renderReviews(
     cachedReviews.filter(r =>
@@ -196,8 +232,39 @@ function applyReviewFilters() {
   );
 }
 
-reviewRatingFilter.addEventListener("change", applyReviewFilters);
-reviewSearchInput.addEventListener("input", applyReviewFilters);
+reviewRatingFilter?.addEventListener("change", applyReviewFilters);
+reviewSearchInput?.addEventListener("input", applyReviewFilters);
+
+/* =========================
+  AUDIT LOG LOAD
+========================= */
+async function loadAuditLogs() {
+  if (!auditTbody) return;
+
+  const snap = await getDocs(collection(db, "audit_logs"));
+  cachedAudit = [];
+
+  snap.forEach(doc => cachedAudit.push({ id: doc.id, ...doc.data() }));
+
+  cachedAudit.sort((a,b)=>
+    (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+  );
+
+  renderAudit(cachedAudit.slice(0,100));
+  renderOverviewStats();
+}
+
+auditSearchInput?.addEventListener("input", () => {
+  const q = auditSearchInput.value.toLowerCase();
+
+  renderAudit(
+    cachedAudit.filter(l =>
+      (l.action || "").toLowerCase().includes(q) ||
+      (l.targetId || "").toLowerCase().includes(q) ||
+      (l.actorEmail || "").toLowerCase().includes(q)
+    )
+  );
+});
 
 /* =========================
    AUTH
@@ -209,6 +276,8 @@ onAuthStateChanged(auth, async user => {
   }
 
   renderUserDropdown(user);
+
   await loadUsers();
   await loadReviews();
+  await loadAuditLogs();   // ✅ NEW
 });
