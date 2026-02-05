@@ -18,13 +18,13 @@ const getMillis = (ts: unknown): number => {
 };
 
 /**
- * Normalize timestamp to Date object for response
- * @param {unknown} ts - The timestamp value to normalize
- * @return {Date | null} Date object or null if invalid
+ * Convert timestamp to seconds (for JSON serialization)
+ * @param {unknown} ts - The timestamp value to convert
+ * @return {number} Seconds since epoch, or 0 if invalid
  */
-const normalizeTimestamp = (ts: unknown): Date | null => {
+const timestampToSeconds = (ts: unknown): number => {
   const millis = getMillis(ts);
-  return millis ? new Date(millis) : null;
+  return millis ? Math.floor(millis / 1000) : 0;
 };
 
 /**
@@ -123,8 +123,8 @@ export const getCallHistory = functions.https.onCall(
           id: call.id,
           caller_user_id: call.caller_user_id,
           callee_user_id: call.callee_user_id,
-          created_at: normalizeTimestamp(call.created_at),
-          ended_at: normalizeTimestamp(call.ended_at),
+          created_at: timestampToSeconds(call.created_at), // FIXED: Return as seconds (number)
+          ended_at: timestampToSeconds(call.ended_at), // FIXED: Return as seconds (number)
           status: call.status,
           duration: call.duration,
           is_caller: call.caller_user_id === userId,
@@ -132,6 +132,10 @@ export const getCallHistory = functions.https.onCall(
             userId: otherUserId,
             displayName: "Unknown User",
           },
+          // Include detection fields from the original call document
+          [`${call.callee_user_id}_detection_score`]: call[`${call.callee_user_id}_detection_score`],
+          [`${call.callee_user_id}_detection_timestamp`]: call[`${call.callee_user_id}_detection_timestamp`],
+          [`${call.callee_user_id}_is_deepfake`]: call[`${call.callee_user_id}_is_deepfake`],
         };
       });
 
