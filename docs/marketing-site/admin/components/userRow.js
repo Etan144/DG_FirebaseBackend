@@ -1,16 +1,34 @@
-import { StatusBadge } from "./badge.js";
+export function UserRow(u) {
+  const email = u.email || "(no email)";
+  const disabled = u.disabled === true;
 
-export function UserRow(user) {
-  const actionLabel = user.disabled ? "Enable" : "Disable";
   return `
     <tr>
-      <td>${user.email || "(no email)"}</td>
-      <td>${StatusBadge(!!user.disabled)}</td>
+      <td>${email}</td>
+
       <td>
-        <div class="action-buttons">
-          <button class="btn secondary sm" data-action="toggle-user" data-uid="${user.uid}" data-disabled="${user.disabled ? "1" : "0"}">${actionLabel}</button>
-          <button class="btn danger sm" data-action="delete-user" data-uid="${user.uid}">Delete</button>
-        </div>
+        <span class="badge ${disabled ? "danger" : "success"}">
+          ${disabled ? "Disabled" : "Active"}
+        </span>
+      </td>
+
+      <td>
+        <button
+          class="btn sm ${disabled ? "secondary" : "warning"}"
+          data-action="toggle-user"
+          data-uid="${u.uid}"
+          data-disabled="${disabled ? "1" : "0"}"
+        >
+          ${disabled ? "Enable" : "Disable"}
+        </button>
+
+        <button
+          class="btn sm danger"
+          data-action="delete-user"
+          data-uid="${u.uid}"
+        >
+          Delete
+        </button>
       </td>
     </tr>
   `;

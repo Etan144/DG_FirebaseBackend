@@ -3,16 +3,22 @@ import * as admin from "firebase-admin";
 
 if (!admin.apps.length) admin.initializeApp();
 
-/* =========================
-   AUDIT LOG WRITER
-========================= */
+/**
+ * Writes an admin audit log entry to Firestore.
+ * @param {functions.https.CallableContext} context Callable function context
+ * @param {string} action Admin action name
+ * @param {string} targetType Target entity type
+ * @param {string} targetId Target entity ID
+ * @param {Record<string, unknown>} metadata Additional structured metadata
+ * @return {Promise<void>}
+ */
 async function writeAudit(
   context: functions.https.CallableContext,
   action: string,
   targetType: string,
   targetId: string,
   metadata: Record<string, unknown> = {}
-) {
+): Promise<void> {
   if (!context.auth) return;
 
   await admin.firestore().collection("audit_logs").add({
@@ -26,17 +32,20 @@ async function writeAudit(
   });
 }
 
-/* =========================
-   LIST USERS
-========================= */
+/**
+ * Admin-only function to list Firebase Auth users.
+ */
 export const listUsers = functions.https.onCall(async (_data, context) => {
   if (!context.auth || !context.auth.token.admin) {
-    throw new functions.https.HttpsError("permission-denied", "Only admins can list users.");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only admins can list users."
+    );
   }
 
-  const users = await admin.auth().listUsers(50);
+  const result = await admin.auth().listUsers(50);
 
-  return users.users.map(u => ({
+  return result.users.map((u) => ({
     uid: u.uid,
     email: u.email,
     disabled: u.disabled,
@@ -47,45 +56,57 @@ export const listUsers = functions.https.onCall(async (_data, context) => {
   }));
 });
 
-/* =========================
-   ENABLE / DISABLE USER
-========================= */
+/**
+ * Admin-only function to enable or disable a user account.
+ */
 export const setUserDisabled = functions.https.onCall(async (data, context) => {
   if (!context.auth || !context.auth.token.admin) {
-    throw new functions.https.HttpsError("permission-denied", "Only admins can disable users.");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only admins can disable users."
+    );
   }
 
-  const { uid, disabled } = data as { uid: string; disabled: boolean };
+  const {uid, disabled} = data as {uid: string; disabled: boolean};
 
   if (!uid) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing uid");
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing uid"
+    );
   }
 
-  await admin.auth().updateUser(uid, { disabled });
+  await admin.auth().updateUser(uid, {disabled});
 
   await writeAudit(
     context,
     disabled ? "DISABLE_USER" : "ENABLE_USER",
     "USER",
     uid,
-    { disabled }
+    {disabled}
   );
 
-  return { success: true };
+  return {success: true};
 });
 
-/* =========================
-   DELETE USER
-========================= */
+/**
+ * Admin-only function to permanently delete a user account.
+ */
 export const deleteUser = functions.https.onCall(async (data, context) => {
   if (!context.auth || !context.auth.token.admin) {
-    throw new functions.https.HttpsError("permission-denied", "Only admins can delete users.");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only admins can delete users."
+    );
   }
 
-  const { uid } = data as { uid: string };
+  const {uid} = data as {uid: string};
 
   if (!uid) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing uid");
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing uid"
+    );
   }
 
   await admin.auth().deleteUser(uid);
@@ -97,5 +118,5 @@ export const deleteUser = functions.https.onCall(async (data, context) => {
     uid
   );
 
-  return { success: true };
+  return {success: true};
 });

@@ -3,15 +3,20 @@ import * as admin from "firebase-admin";
 
 if (!admin.apps.length) admin.initializeApp();
 
-/* =========================
-   AUDIT LOG WRITER
-========================= */
+/**
+ * Writes an admin audit log entry to Firestore.
+ * @param {functions.https.CallableContext} context Callable function context
+ * @param {string} action Admin action name
+ * @param {string} targetType Target entity type
+ * @param {string} targetId Target entity ID
+ * @return {Promise<void>}
+ */
 async function writeAudit(
   context: functions.https.CallableContext,
   action: string,
   targetType: string,
   targetId: string
-) {
+): Promise<void> {
   if (!context.auth) return;
 
   await admin.firestore().collection("audit_logs").add({
@@ -24,21 +29,30 @@ async function writeAudit(
   });
 }
 
-/* =========================
-   ADMIN DELETE REVIEW
-========================= */
+/**
+ * Admin-only function to delete a review document.
+ */
 export const deleteReview = functions.https.onCall(async (data, context) => {
   if (!context.auth || !context.auth.token.admin) {
-    throw new functions.https.HttpsError("permission-denied", "Only admins can delete reviews.");
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only admins can delete reviews."
+    );
   }
 
-  const { reviewId } = data as { reviewId: string };
+  const {reviewId} = data as {reviewId: string};
 
   if (!reviewId) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing reviewId");
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing reviewId"
+    );
   }
 
-  await admin.firestore().collection("reviews").doc(reviewId).delete();
+  await admin.firestore()
+    .collection("reviews")
+    .doc(reviewId)
+    .delete();
 
   await writeAudit(
     context,
@@ -47,5 +61,5 @@ export const deleteReview = functions.https.onCall(async (data, context) => {
     reviewId
   );
 
-  return { success: true };
+  return {success: true};
 });
