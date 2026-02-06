@@ -21,12 +21,16 @@
     }
     a { color: inherit; text-decoration: none; }
     .page { max-width: 1200px; margin: 0 auto; padding: 28px 22px 64px; position: relative; }
-    header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: rgba(12,20,36,0.7); border: 1px solid var(--stroke); border-radius: 18px; backdrop-filter: blur(12px); position: sticky; top: 16px; z-index: 10; }
+    header { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; padding: 14px 18px; background: rgba(12,20,36,0.7); border: 1px solid var(--stroke); border-radius: 18px; backdrop-filter: blur(12px); position: sticky; top: 16px; z-index: 10; overflow:visible; line-height:1;}    
+    header > * {
+      align-self: center;
+    }
     .brand { display: flex; align-items: center; gap: 10px; }
     .logo { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #03101a; font-weight: 700; letter-spacing: -0.04em; box-shadow: 0 10px 30px rgba(27,212,242,0.22); }
     nav { display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 14px; }
+    nav button {color: var(--muted); font:inherit; background: none; border: none; padding: 6px 0; height: 32px; display: flex; align-items: center; cursor: pointer;}
     nav a:hover { color: var(--text); }
-    .cta { display: flex; align-items: center; gap: 10px; }
+    .cta { display: flex; align-items: center; height: 44px; flex:0 0 auto;}
     .btn { padding: 11px 16px; border-radius: 12px; border: 1px solid var(--stroke); background: rgba(255,255,255,0.02); color: var(--text); font-weight: 600; transition: 0.18s ease; cursor: pointer; }
     .btn.primary { background: linear-gradient(120deg, var(--accent), var(--accent-2)); color: #03101a; border: none; box-shadow: 0 10px 40px rgba(27,212,242,0.32); }
     .btn.secondary { background: rgba(27,212,242,0.1); color: var(--accent); border: 1px solid var(--accent); }
@@ -103,7 +107,7 @@
 
     @media (max-width: 700px) {
       header { position: static; flex-wrap: wrap; gap: 12px; }
-      nav { width: 100%; justify-content: center; }
+      nav { width: 100%; justify-content: center; flex:1 1 auto;}
       .cta { width: 100%; justify-content: center; }
       .hero-actions { flex-direction: column; align-items: stretch; }
       .btn { text-align: center; width: 100%; }
@@ -112,7 +116,7 @@
     .stats-banner {
       display: flex;
       justify-content: space-around;
-      background: var(--dark-blue-2);
+      background: var(--panel);
       text-align: center;
       padding: 40px 20px;
       flex-wrap: wrap;
@@ -154,7 +158,7 @@
       flex: 0 0 100%;
       box-sizing: border-box;
       padding: 40px;
-      background: var(--dark-blue-2);
+      background: var(--panel);
     }
     .review-card .stars {
       color: #ffc107;
@@ -177,7 +181,7 @@
       margin-top: 20px;
     }
     .slider-nav button {
-      background: var(--dark-blue-2);
+      background: var(--panel);
       color: white;
       border: 1px solid var(--accent);
       padding: 10px 20px;
@@ -188,7 +192,21 @@
     }
     .slider-nav button:hover {
       background: var(--accent);
-      color: var(--dark-blue);
+      color: var(--panel);
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      padding: 6px 0;
+      height: 32px;
+      display: flex;
+      align-items: center;
+    }
+
+
+    nav button:hover {
+      color: var(--text);
     }
 
     .reviews-cta {
@@ -376,9 +394,226 @@
 .hint.ok { color: #2ecc71; }
 .hint.error { color: #e74c3c; }
 
+/* =========================
+   USER AVATAR DROPDOWN
+========================= */
+
+.user-menu {
+  position: relative;
+  display: inline-block;
+  line-height: 0;              /* prevents vertical jump */
+  flex: 0 0 auto;              /* prevent flex resize */
+}
+
+/* ===== TRIGGER PILL ===== */
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  height: 44px;                /* lock height → no movement */
+  padding: 6px 14px 6px 6px;
+
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+
+  flex-shrink: 0;              /* prevent shrink in flex header */
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.user-trigger:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(27,212,242,0.35);
+}
+
+/* focused/open state — no border width change */
+.user-menu.open .user-trigger {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(27,212,242,0.45);
+}
+
+/* ===== AVATAR CIRCLE ===== */
+
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+
+  background: linear-gradient(135deg,var(--accent),var(--accent-2));
+  display: grid;
+  place-items: center;
+
+  font-weight: 700;
+  font-size: 14px;
+  color: #03101a;
+
+  flex-shrink: 0;
+}
+
+/* ===== EMAIL TEXT ===== */
+
+.user-email {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 180px;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== CARET ===== */
+
+.caret {
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform .18s ease;
+}
+
+.user-menu.open .caret {
+  transform: rotate(180deg);
+}
+
+/* =========================
+   DROPDOWN PANEL
+========================= */
+
+.user-dropdown {
+  position: absolute;
+
+  top: calc(100% + 10px);
+  right: 0;                    /* align to pill right edge */
+
+  width: 240px;
+  padding: 8px;
+
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+
+  box-shadow:
+    0 24px 60px rgba(0,0,0,.55),
+    0 0 0 1px rgba(27,212,242,.12);
+
+  z-index: 9999;
+
+  /* animation without layout shift */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: opacity .18s ease,
+              transform .18s ease,
+              visibility .18s;
+}
+
+/* show dropdown */
+.user-menu.open .user-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* ===== DROPDOWN ITEMS ===== */
+
+.user-dropdown button,
+.user-dropdown a {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 12px;
+  border-radius: 10px;
+
+  background: none;
+  border: none;
+  text-align: left;
+  text-decoration: none;
+
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+
+  transition: background .15s ease, color .15s ease;
+}
+
+.user-dropdown button:hover,
+.user-dropdown a:hover {
+  background: rgba(27,212,242,0.12);
+  color: var(--accent);
+}
+
+/* ===== DIVIDER ===== */
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--stroke);
+  margin: 6px 0;
+}
+
+/* ===== DANGER ACTION ===== */
+
+.user-dropdown .danger {
+  color: #ff6b6b;
+}
+
+.user-dropdown .danger:hover {
+  background: rgba(255,107,107,.12);
+  color: #ff6b6b;
+}
+
 /*Mobile Improvements*/
 
 @media (max-width: 700px) {
+
+  /* ---------- Header layout ---------- */
+
+  header {
+    flex-wrap: wrap;
+    gap: 12px;
+    position: static;
+  }
+
+  nav {
+    width: 100%;
+    justify-content: center;
+    order: 3;
+  }
+
+  .cta {
+    width: 100%;
+    justify-content: center;
+    order: 2;
+  }
+
+  /* ---------- Avatar pill ---------- */
+
+  .user-email {
+    display: none;        /* hide email text on small screens */
+  }
+
+  .user-trigger {
+    padding: 6px;         /* compact pill */
+    height: 40px;
+  }
+
+  /* keep dropdown centered under avatar on mobile */
+  .user-dropdown {
+    right: 50%;
+    transform: translate(50%, -8px);
+  }
+
+  .user-menu.open .user-dropdown {
+    transform: translate(50%, 0);
+  }
+
+  /* ---------- Forms ---------- */
 
   .form-container {
     width: 100%;
@@ -386,18 +621,26 @@
     padding: 28px;
   }
 
+  /* ---------- Slider ---------- */
+
   .slider-container {
     width: 100%;
   }
+
+  /* ---------- Stats ---------- */
 
   .stats-banner {
     flex-direction: column;
     gap: 20px;
   }
 
+  /* ---------- Cards ---------- */
+
   .phone-card {
     padding: 16px;
   }
+
+  /* ---------- Text ---------- */
 
   .lead {
     font-size: 16px;
