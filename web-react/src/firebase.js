@@ -8,7 +8,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAC5WR-WL372sG418miEF9uN6Ic_jPv9OA",
   authDomain: "fyp-deepfakeguard.firebaseapp.com",
   projectId: "fyp-deepfakeguard",
-  storageBucket: "fyp-deepfakeguard.appspot.com",
+  storageBucket: "fyp-deepfakeguard.firebasestorage.app",
   messagingSenderId: "5675548760",
   appId: "1:5675548760:web:a55e537ee4cff9df4aca2d"
 };
