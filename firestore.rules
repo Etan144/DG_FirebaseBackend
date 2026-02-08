@@ -4,7 +4,7 @@ service cloud.firestore {
 
     /* =========================
        HELPERS
-       ========================= */
+    ========================= */
     function signedIn() {
       return request.auth != null;
     }
@@ -14,9 +14,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid))
-             .data.role == "ADMIN";
+      return signedIn() && request.auth.token.admin == true;
     }
 
     function isCallParticipant(callId) {
@@ -32,9 +30,34 @@ service cloud.firestore {
         );
     }
 
+    function isCallSignalingUpdate() {
+      return request.resource.data.diff(resource.data)
+        .changedKeys().hasOnly([
+          "status",
+          "offer_sdp",
+          "answer_sdp",
+          "updated_at",
+          "ended_by",
+          "ended_reason",
+          "ended_at_ms"
+        ]);
+    }
+
+    function isDetectionUpdate(userId) {
+      return request.resource.data.diff(resource.data)
+        .changedKeys().hasOnly([
+          userId + "_detection_score",
+          userId + "_is_deepfake",
+          userId + "_detection_timestamp",
+          userId + "_highest_detection_score",
+          userId + "_highest_detection_timestamp",
+          userId + "_highest_is_deepfake"
+        ]);
+    }
+
     /* =========================
        PUBLIC USER DIRECTORY
-       ========================= */
+    ========================= */
     match /public_users/{userId} {
       allow read: if signedIn();
       allow write: if false;
@@ -42,7 +65,7 @@ service cloud.firestore {
 
     /* =========================
        USERNAME REGISTRY
-       ========================= */
+    ========================= */
     match /usernames/{username} {
       allow read: if signedIn();
       allow create, update, delete: if false;
@@ -50,23 +73,24 @@ service cloud.firestore {
 
     /* =========================
        PRIVATE USER PROFILES
-       ========================= */
+    ========================= */
     match /users/{userId} {
+
+      // Admins can read all users
       allow read: if isSelf(userId) || isAdmin();
 
+      // User can only change displayName
       allow update: if isSelf(userId)
         && request.resource.data.diff(resource.data)
-             .changedKeys().hasOnly(["displayName"]);
+             .changedKeys().hasOnly(["displayName","subscription"]);
 
       allow create, delete: if false;
-      
-      /* USER CONTACTS */
-         match /contacts/{contactId} {
 
-        // Read own contacts
+      /* USER CONTACTS */
+      match /contacts/{contactId} {
+
         allow read: if isSelf(userId);
 
-        // Create new contact
         allow create: if isSelf(userId)
           && request.resource.data.keys().hasOnly([
             "username",
@@ -76,92 +100,74 @@ service cloud.firestore {
           ])
           && request.resource.data.addedBy == request.auth.uid;
 
-        // Delete own contact
         allow delete: if isSelf(userId);
 
-        // Allow updating the label field (for blocking/unblocking)
         allow update: if isSelf(userId)
           && request.resource.data.diff(resource.data)
                .changedKeys().hasOnly(["label"]);
       }
-
-
     }
 
     /* =========================
        CALL SIGNALING + DETECTION
-       ========================= */
+    ========================= */
     match /calls/{callId} {
 
-      /* ---- CREATE ---- */
       allow create: if signedIn()
         && request.auth.uid == request.resource.data.caller_user_id;
 
-      /* ---- READ (QUERY SAFE) ---- */
       allow read: if signedIn();
 
-      /* ---- UPDATE ---- */
       allow update: if isCallParticipant(callId)
         && (
-          request.resource.data.diff(resource.data)
-            .changedKeys().hasOnly([
-              "status",
-              "offer_sdp",
-              "answer_sdp",
-              "updated_at",
-              "ended_by",
-              "ended_reason",
-              "ended_at_ms"
-            ])
+          isCallSignalingUpdate()
           ||
-          request.resource.data.diff(resource.data)
-            .changedKeys().hasOnly([
-              request.auth.uid + "_detection_score",
-              request.auth.uid + "_is_deepfake",
-              request.auth.uid + "_detection_timestamp"
-            ])
+          isDetectionUpdate(
+            get(/databases/$(database)/documents/calls/$(callId))
+              .data.caller_user_id
+          )
+          ||
+          isDetectionUpdate(
+            get(/databases/$(database)/documents/calls/$(callId))
+              .data.callee_user_id
+          )
         );
 
       allow delete: if false;
 
-      /* =========================
-         ICE CANDIDATES (FIX)
-         ========================= */
+      /* ICE CANDIDATES */
       match /ice_candidates/{userId} {
 
-        // Needed because Firestore may read the parent doc when attaching the listener
         allow get, list: if isCallParticipant(callId);
 
         match /candidates/{candidateId} {
-
-          // LIST is required for snapshot listeners
           allow list, get: if isCallParticipant(callId);
-
-          // Each user writes ONLY their own ICE docs
           allow create: if signedIn() && request.auth.uid == userId;
-
           allow update, delete: if false;
         }
       }
     }
 
     /* =========================
-       CUSTOMER REVIEWS (OPTIONAL)
-       ========================= */
+       CUSTOMER REVIEWS
+    ========================= */
     match /reviews/{reviewId} {
+
       allow read: if true;
 
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
 
       allow delete: if isAdmin();
+
       allow update: if false;
     }
-    
+
     /* =========================
        ADMIN AUDIT LOGS
     ========================= */
     match /audit_logs/{logId} {
+
       allow read: if isAdmin();
 
       allow create, update, delete: if false;
@@ -169,7 +175,7 @@ service cloud.firestore {
 
     /* =========================
        DEFAULT DENY
-       ========================= */
+    ========================= */
     match /{document=**} {
       allow read, write: if false;
     }
