@@ -2,6 +2,9 @@ import { Link } from "react-router-dom";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import ReviewSlider from "../components/ReviewSlider";
+import SubscribeButton from "../components/SubscribeButton";
+import DowngradeButton from "../components/DowngradeButton";
+
 
 export default function Home() {
   return (
@@ -277,6 +280,91 @@ export default function Home() {
           <span>On-prem</span>
           <span>Cloud</span>
           <span>Mobile SDK</span>
+        </div>
+      </section>
+
+      <section className="section" id="subscription">
+        <h2>Pricing</h2>
+
+        <p className="lead">
+          Start free. Upgrade when you need advanced protection and analytics.
+        </p>
+
+        <div className="grid">
+
+          {/* FREE */}
+          <div className="card">
+            <h3>Free</h3>
+            <p className="lead" style={{ fontSize: 14 }}>
+              Great for testing the experience and basic call protection.
+            </p>
+
+            <div className="pill-row" style={{ marginTop: 12 }}>
+              <span>Live call warnings</span>
+              <span>Basic call logs</span>
+              <span>On-device detection</span>
+            </div>
+
+            <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>S$0</div>
+              <div className="muted" style={{ fontSize: 13 }}>forever</div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <DowngradeButton />
+            </div>
+          </div>
+
+          {/* PRO */}
+          <div className="card">
+            <h3>Pro</h3>
+            <p className="lead" style={{ fontSize: 14 }}>
+              For users who want stronger protection and detailed insights.
+            </p>
+
+            <div className="pill-row" style={{ marginTop: 12 }}>
+              <span>Advanced scoring</span>
+              <span>Threat analytics</span>
+              <span>Priority updates</span>
+              <span>Exportable reports</span>
+            </div>
+
+            <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>S$4.99</div>
+              <div className="muted" style={{ fontSize: 13 }}>/ month</div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <SubscribeButton plan="pro" />
+            </div>
+          </div>
+
+          {/* ENTERPRISE */}
+          <div className="card">
+            <h3>Enterprise</h3>
+            <p className="lead" style={{ fontSize: 14 }}>
+              For telcos & regulated orgs deploying at scale.
+            </p>
+
+            <div className="pill-row" style={{ marginTop: 12 }}>
+              <span>Team dashboards</span>
+              <span>Admin controls</span>
+              <span>SLA support</span>
+              <span>Regional model tuning</span>
+            </div>
+
+            <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>Custom</div>
+              <div className="muted" style={{ fontSize: 13 }}>pricing</div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <a className="btn secondary" href="#demo-video">
+                Talk to us
+              </a>
+            </div>
+          </div>
+
         </div>
       </section>
 

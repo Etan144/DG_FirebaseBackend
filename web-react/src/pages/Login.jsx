@@ -2,12 +2,17 @@ import { useState } from "react";
 import { signInWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../firebase";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // return routing support (for subscribe -> checkout flow)
+  const returnTo = location.state?.returnTo;
+  const returnPlan = location.state?.plan;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +38,7 @@ export default function Login() {
         password
       );
 
-      //Check first-login verification rule
+      // ===== First-login verification rule =====
       try {
         const verificationCheck =
           await checkSendVerificationOnFirstLogin();
@@ -50,14 +55,14 @@ export default function Login() {
         console.error("Verification check failed:", verificationErr);
       }
 
-      //Require verified email
+      // ===== Require verified email =====
       if (!cred.user.emailVerified) {
         setFeedback("Please verify your email before logging in.");
         setLoading(false);
         return;
       }
 
-      //Claim pending username if exists
+      // ===== Claim pending username if exists =====
       const pendingUsername =
         localStorage.getItem("pendingUsername");
 
@@ -68,15 +73,28 @@ export default function Login() {
 
       setFeedback("Login successful!");
 
-      //Check admin claim
+      // ===== Role + return routing =====
       const token = await cred.user.getIdTokenResult();
 
       setTimeout(() => {
+
+        // Admin override always wins
         if (token.claims.admin) {
           navigate("/admin");
-        } else {
-          navigate("/download");
+          return;
         }
+
+        // ✅ If user came from Subscribe → go checkout
+        if (returnTo) {
+          navigate(returnTo, {
+            state: { plan: returnPlan }
+          });
+          return;
+        }
+
+        // Normal user login landing
+        navigate("/download");
+
       }, 800);
 
     } catch (err) {

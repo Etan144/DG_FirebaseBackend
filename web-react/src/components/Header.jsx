@@ -103,6 +103,12 @@ export default function Header() {
         <button onClick={() => goToSection("faq")}>
           FAQ
         </button>
+        <button onClick={() => goToSection("subscription")}>
+          Pricing
+        </button>
+        <button onClick={() => navigate("/About")}>
+          About Us
+        </button>
       </nav>
 
       {/* RIGHT SIDE */}

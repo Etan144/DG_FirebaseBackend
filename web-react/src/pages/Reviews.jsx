@@ -16,7 +16,7 @@ export default function Reviews() {
   const getReviews = httpsCallable(functions, "getReviews");
 
   /* =========================
-     INITIAL LOAD (React-safe)
+     INITIAL LOAD
      ========================= */
   useEffect(() => {
     let cancelled = false;
