@@ -3,6 +3,18 @@ import * as functions from "firebase-functions/v1";
 import {db} from "./firebase";
 
 /* =========================
+   HELPERS
+========================= */
+
+/**
+ * Get YYYY-MM-DD id for today
+ * @return {string}
+ */
+function todayId(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* =========================
    CORE AGGREGATION LOGIC
 ========================= */
 
@@ -32,24 +44,35 @@ async function recomputeStats(): Promise<void> {
     }
   });
 
-  const avg = scores.length ?
+  const avg = scores.length > 0 ?
     scores.reduce((a, b) => a + b, 0) / scores.length :
     0;
 
+  const stats = {
+    avg_confidence: avg,
+    deepfake_rate: total > 0 ? deepfakeCount / total : 0,
+    total_scans: total,
+    updated_at: new Date(),
+  };
+
+  // global snapshot
   await db.collection("aggregate_stats")
     .doc("global")
-    .set({
-      avg_confidence: avg,
-      deepfake_rate: total ? deepfakeCount / total : 0,
-      total_scans: total,
-      updated_at: new Date(),
-    });
+    .set(stats);
+
+  // daily trend snapshot
+  await db.collection("aggregate_stats_daily")
+    .doc(todayId())
+    .set(stats);
 }
 
 /* =========================
-   (A) SCHEDULED — DAILY
+   SCHEDULED — DAILY
 ========================= */
 
+/**
+ * Scheduled daily recompute
+ */
 export const recomputeStatsDaily = onSchedule(
   "every 24 hours",
   async (): Promise<void> => {
@@ -58,9 +81,12 @@ export const recomputeStatsDaily = onSchedule(
 );
 
 /* =========================
-   (B) CALLABLE — MANUAL
+   CALLABLE — MANUAL
 ========================= */
 
+/**
+ * Admin callable recompute
+ */
 export const recomputeStatsNow = functions.https.onCall(
   async (_data, context): Promise<{success: boolean}> => {
     if (!context.auth || context.auth.token.admin !== true) {

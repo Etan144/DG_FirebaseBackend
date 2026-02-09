@@ -5,6 +5,7 @@ import zavierPhoto from "../assets/team/zavier.jpg"
 import eugenePhoto from "../assets/team/eugene.jpg"
 import dongHyunPhoto from "../assets/team/donghyun.jpg"
 import lawrencePhoto from "../assets/team/lawrence.jpg"
+import seeyuPhoto from "../assets/team/seeyu.jpg"
 
 const teamMembers = [
   {
@@ -38,7 +39,7 @@ const teamMembers = [
   {
     name: "See Yu",
     role: "Full-Stack Developer",
-    photo: null,
+    photo: seeyuPhoto,
     email: "ys549@uowmal.edu.au",
     bio: "Short bio here"
   }

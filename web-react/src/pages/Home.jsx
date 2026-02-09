@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 import Header from "../components/Header";
@@ -13,6 +13,27 @@ import DowngradeButton from "../components/DowngradeButton";
 export default function Home() {
   const [avgConfidence, setAvgConfidence] = useState(null);
   const [deepfakeRate, setDeepfakeRate] = useState(null);
+
+  useEffect(() => {
+  async function loadStats() {
+      const snap = await getDoc(doc(db, "aggregate_stats", "global"));
+
+      if (snap.exists()) {
+        const data = snap.data();
+
+        if (typeof data.avg_confidence === "number") {
+          setAvgConfidence((data.avg_confidence * 100).toFixed(1));
+        }
+
+        if (typeof data.deepfake_rate === "number") {
+          setDeepfakeRate((data.deepfake_rate * 100).toFixed(1));
+        }
+      }
+    }
+
+    loadStats();
+  }, []);
+  
   return (
     <div className="page">
 
@@ -192,13 +213,17 @@ export default function Home() {
 
         <div className="stat-row">
           <div className="stat">
-            <strong>87.5%</strong>
-            <span>Detection confidence on high-risk calls</span>
+            <strong>
+              {avgConfidence ? `${avgConfidence}%` : "—"}
+            </strong>
+            <span>Average detection confidence</span>
           </div>
 
           <div className="stat">
-            <strong>↑ 46%</strong>
-            <span>Reduction in impersonation attempts</span>
+            <strong>
+              {deepfakeRate ? `${deepfakeRate}%` : "—"}
+            </strong>
+            <span>Deepfake flagged rate</span>
           </div>
         </div>
       </section>

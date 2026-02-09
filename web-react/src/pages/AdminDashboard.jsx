@@ -7,19 +7,27 @@ import { auth, functions, db } from "../firebase";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 
 import StatCard from "../components/admin/StatCard";
 import UserRow from "../components/admin/UserRow";
 import ReviewCard from "../components/admin/ReviewCard";
+import DetectionTrendChart from "../components/admin/DetectionTrendChart";
+import PerformancePanel from "../components/admin/PerformancePanel";
 
 const REVIEW_PAGE_SIZE = 9;
 
 export default function AdminDashboard() {
 
+  /* =========================
+     STATE
+  ========================= */
+
   const [users, setUsers] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [aggStats, setAggStats] = useState(null);
+  const [dailyTrend, setDailyTrend] = useState([]);
 
   const [userSearch, setUserSearch] = useState("");
   const [reviewSearch, setReviewSearch] = useState("");
@@ -58,7 +66,9 @@ export default function AdminDashboard() {
     await Promise.all([
       loadUsers(),
       loadReviews(),
-      loadAudit()
+      loadAudit(),
+      loadAggStats(),
+      loadDailyTrend()
     ]);
   }
 
@@ -70,17 +80,53 @@ export default function AdminDashboard() {
 
   async function loadReviews() {
     const snap = await getDocs(collection(db, "reviews"));
-    const rows = snap.docs.map(d => ({
+    setReviews(snap.docs.map(d => ({
       id: d.id,
       ...d.data()
-    }));
-    setReviews(rows);
+    })));
   }
 
   async function loadAudit() {
     const snap = await getDocs(collection(db, "audit_logs"));
-    setAudit(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setAudit(snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    })));
   }
+
+  async function loadAggStats() {
+    const snap = await getDoc(doc(db, "aggregate_stats", "global"));
+    setAggStats(snap.exists() ? snap.data() : null);
+  }
+
+  async function loadDailyTrend() {
+    const snap = await getDocs(collection(db, "aggregate_stats_daily"));
+
+    const rows = snap.docs.map(d => {
+      const x = d.data();
+      return {
+        date: d.id,
+        avgConfidence: Number((x.avg_confidence * 100).toFixed(1)),
+        deepfakeRate: Number((x.deepfake_rate * 100).toFixed(1))
+      };
+    });
+
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    setDailyTrend(rows);
+  }
+
+  /* =========================
+     SAFE AUTO REFRESH
+  ========================= */
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      loadAggStats();
+      loadDailyTrend();
+    }, 60000);
+
+    return () => clearInterval(t);
+  }, []);
 
   /* =========================
      ACTIONS
@@ -89,16 +135,24 @@ export default function AdminDashboard() {
   async function setUserDisabled(uid, disabled) {
     const fn = httpsCallable(functions, "setUserDisabled");
     await fn({ uid, disabled });
-    loadUsers();
-    loadAudit();
+    await loadUsers();
+    await loadAudit();
   }
 
   async function deleteReview(id) {
     if (!confirm("Delete review?")) return;
     const fn = httpsCallable(functions, "deleteReview");
     await fn({ reviewId: id });
-    loadReviews();
-    loadAudit();
+    await loadReviews();
+    await loadAudit();
+  }
+
+  async function recomputeStats() {
+    const fn = httpsCallable(functions, "recomputeStatsNow");
+    await fn();
+    await loadAggStats();
+    await loadDailyTrend();
+    alert("Detection stats recomputed");
   }
 
   /* =========================
@@ -107,9 +161,7 @@ export default function AdminDashboard() {
 
   const filteredUsers = useMemo(() =>
     users.filter(u =>
-      (u.email || "")
-        .toLowerCase()
-        .includes(userSearch.toLowerCase())
+      (u.email || "").toLowerCase().includes(userSearch.toLowerCase())
     ),
     [users, userSearch]
   );
@@ -118,9 +170,7 @@ export default function AdminDashboard() {
     reviews.filter(r =>
       r.rating >= reviewMinRating &&
       (!reviewSearch ||
-        (r.description || "")
-          .toLowerCase()
-          .includes(reviewSearch.toLowerCase()))
+        (r.description || "").toLowerCase().includes(reviewSearch.toLowerCase()))
     ),
     [reviews, reviewSearch, reviewMinRating]
   );
@@ -135,7 +185,7 @@ export default function AdminDashboard() {
   );
 
   /* =========================
-     REVIEW PAGINATION
+     PAGINATION
   ========================= */
 
   const totalReviewPages = Math.max(
@@ -162,15 +212,23 @@ export default function AdminDashboard() {
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(2)
     : "—";
 
+  const avgConfidence = aggStats
+    ? (aggStats.avg_confidence * 100).toFixed(1) + "%"
+    : "—";
+
+  const deepfakeRate = aggStats
+    ? (aggStats.deepfake_rate * 100).toFixed(1) + "%"
+    : "—";
+
   /* =========================
      RENDER
   ========================= */
 
   return (
     <div className="page">
-
       <Header />
 
+      {/* ===== TOP DASHBOARD ===== */}
       <section className="section">
         <h2>Admin Dashboard</h2>
 
@@ -192,9 +250,34 @@ export default function AdminDashboard() {
           <StatCard label="Total" value={reviews.length} />
           <StatCard label="Average" value={avgRating} />
         </div>
+
+        <h3>Detection Analytics</h3>
+        <div className="grid">
+          <StatCard label="Avg Confidence" value={avgConfidence} />
+          <StatCard label="Deepfake Rate" value={deepfakeRate} />
+          <StatCard label="Total Scans" value={aggStats?.total_scans ?? "—"} />
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <button className="btn" onClick={recomputeStats}>
+            Recompute Detection Stats
+          </button>
+        </div>
       </section>
 
-      {/* USERS */}
+      {/* ===== PERFORMANCE PANEL ===== */}
+      <section className="section">
+        <h3>Performance Metrics</h3>
+        <PerformancePanel stats={aggStats} />
+      </section>
+
+      {/* ===== TREND CHART ===== */}
+      <section className="section">
+        <h3>Detection Trend Graph</h3>
+        <DetectionTrendChart data={dailyTrend} />
+      </section>
+
+      {/* ===== USERS ===== */}
       <section className="section">
         <h3>User Management</h3>
 
@@ -218,17 +301,13 @@ export default function AdminDashboard() {
           </thead>
           <tbody>
             {filteredUsers.map(u => (
-              <UserRow
-                key={u.uid}
-                user={u}
-                onToggle={setUserDisabled}
-              />
+              <UserRow key={u.uid} user={u} onToggle={setUserDisabled} />
             ))}
           </tbody>
         </table>
       </section>
 
-      {/* REVIEWS */}
+      {/* ===== REVIEWS ===== */}
       <section className="section">
         <h3>Reviews</h3>
 
@@ -254,39 +333,27 @@ export default function AdminDashboard() {
 
         <div className="reviews-grid">
           {pagedReviews.map(r => (
-            <ReviewCard
-              key={r.id}
-              review={r}
-              onDelete={deleteReview}
-            />
+            <ReviewCard key={r.id} review={r} onDelete={deleteReview} />
           ))}
         </div>
 
-        {/* Pagination */}
         <div className="reviews-actions">
-          <button
-            className="btn"
-            disabled={reviewPage === 1}
-            onClick={() => setReviewPage(p => p - 1)}
-          >
+          <button className="btn" disabled={reviewPage === 1}
+            onClick={() => setReviewPage(p => p - 1)}>
             Prev
           </button>
 
-          <span style={{ padding: "0 12px" }}>
-            Page {reviewPage} / {totalReviewPages}
-          </span>
+          <span>{reviewPage} / {totalReviewPages}</span>
 
-          <button
-            className="btn"
+          <button className="btn"
             disabled={reviewPage === totalReviewPages}
-            onClick={() => setReviewPage(p => p + 1)}
-          >
+            onClick={() => setReviewPage(p => p + 1)}>
             Next
           </button>
         </div>
       </section>
 
-      {/* AUDIT */}
+      {/* ===== AUDIT ===== */}
       <section className="section">
         <h3>Audit Log</h3>
 
