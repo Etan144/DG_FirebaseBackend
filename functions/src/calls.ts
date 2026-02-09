@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions/v1";
+import * as admin from "firebase-admin";
 import {db} from "./firebase";
 
 /**
@@ -114,6 +115,18 @@ export const getCallHistory = functions.https.onCall(
         });
       }
 
+      const phoneMap = new Map<string, string | null>();
+      if (userIds.size > 0) {
+        const authUsers = await Promise.all(
+          Array.from(userIds).map((uid) =>
+            admin.auth().getUser(uid)
+              .then((user) => [uid, user.phoneNumber ?? null] as const)
+              .catch(() => [uid, null] as const)
+          )
+        );
+        authUsers.forEach(([uid, phone]) => phoneMap.set(uid, phone));
+      }
+
       // Enrich calls with user details
       const enrichedCalls = calls.map((call) => {
         const otherUserId = call.caller_user_id === userId ?
@@ -129,9 +142,12 @@ export const getCallHistory = functions.https.onCall(
           status: call.status,
           duration: call.duration,
           is_caller: call.caller_user_id === userId,
-          other_user: userDetailsMap.get(otherUserId) || {
-            userId: otherUserId,
-            displayName: "Unknown User",
+          other_user: {
+            ...(userDetailsMap.get(otherUserId) || {
+              userId: otherUserId,
+              displayName: "Unknown User",
+            }),
+            phoneNumber: phoneMap.get(otherUserId) ?? null,
           },
           // Include detection fields from the original call document (old + new)
           [`${call.callee_user_id}_highest_detection_score`]:
