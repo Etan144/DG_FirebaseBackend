@@ -25,6 +25,7 @@ export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews}
 export {getCallHistory, endCall} from "./calls";
 export {listUsers, setUserDisabled, deleteUser} from "./adminUsers";
 export {deleteReview as adminDeleteReview} from "./adminReviews";
+export {recomputeStatsDaily, recomputeStatsNow} from "./stats";
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript

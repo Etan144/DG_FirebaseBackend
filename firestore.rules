@@ -162,6 +162,15 @@ service cloud.firestore {
 
       allow update: if false;
     }
+    
+    /* =========================
+       AGGREGATE STATS
+    ========================= */
+    match /aggregate_stats/{docId} {
+      allow read: if true;   
+      allow write: if false;
+    }
+
 
     /* =========================
        ADMIN AUDIT LOGS

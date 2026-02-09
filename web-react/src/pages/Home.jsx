@@ -1,4 +1,8 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
+
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import ReviewSlider from "../components/ReviewSlider";
@@ -7,6 +11,8 @@ import DowngradeButton from "../components/DowngradeButton";
 
 
 export default function Home() {
+  const [avgConfidence, setAvgConfidence] = useState(null);
+  const [deepfakeRate, setDeepfakeRate] = useState(null);
   return (
     <div className="page">
 
