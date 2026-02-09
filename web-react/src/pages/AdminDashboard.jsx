@@ -86,12 +86,11 @@ export default function AdminDashboard() {
     })));
   }
 
+  // ✅ UPDATED — now uses Cloud Function instead of direct Firestore
   async function loadAudit() {
-    const snap = await getDocs(collection(db, "audit_logs"));
-    setAudit(snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    })));
+    const fn = httpsCallable(functions, "getAuditLogs");
+    const res = await fn({ limit: 200 });
+    setAudit(Array.isArray(res.data) ? res.data : []);
   }
 
   async function loadAggStats() {
