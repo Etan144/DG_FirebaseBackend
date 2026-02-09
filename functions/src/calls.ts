@@ -132,10 +132,19 @@ export const getCallHistory = functions.https.onCall(
             userId: otherUserId,
             displayName: "Unknown User",
           },
-          // Include detection fields from the original call document
-          [`${call.callee_user_id}_detection_score`]: call[`${call.callee_user_id}_detection_score`],
-          [`${call.callee_user_id}_detection_timestamp`]: call[`${call.callee_user_id}_detection_timestamp`],
-          [`${call.callee_user_id}_is_deepfake`]: call[`${call.callee_user_id}_is_deepfake`],
+          // Include detection fields from the original call document (old + new)
+          [`${call.callee_user_id}_highest_detection_score`]:
+            call[`${call.callee_user_id}_highest_detection_score`],
+          [`${call.callee_user_id}_highest_detection_timestamp`]:
+            call[`${call.callee_user_id}_highest_detection_timestamp`],
+          [`${call.callee_user_id}_highest_is_deepfake`]:
+            call[`${call.callee_user_id}_highest_is_deepfake`],
+          [`${call.callee_user_id}_detection_score`]:
+            call[`${call.callee_user_id}_detection_score`],
+          [`${call.callee_user_id}_detection_timestamp`]:
+            call[`${call.callee_user_id}_detection_timestamp`],
+          [`${call.callee_user_id}_is_deepfake`]:
+            call[`${call.callee_user_id}_is_deepfake`],
         };
       });
 
