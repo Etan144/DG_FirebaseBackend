@@ -84,7 +84,7 @@ export default function Login() {
           return;
         }
 
-        // ✅ If user came from Subscribe → go checkout
+        // If user came from Subscribe → go checkout
         if (returnTo) {
           navigate(returnTo, {
             state: { plan: returnPlan }
