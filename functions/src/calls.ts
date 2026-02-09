@@ -125,6 +125,7 @@ export const getCallHistory = functions.https.onCall(
           callee_user_id: call.callee_user_id,
           created_at: timestampToSeconds(call.created_at), // FIXED: Return as seconds (number)
           ended_at: timestampToSeconds(call.ended_at), // FIXED: Return as seconds (number)
+          updated_at: timestampToSeconds(call.updated_at), // Fallback timestamp
           status: call.status,
           duration: call.duration,
           is_caller: call.caller_user_id === userId,
