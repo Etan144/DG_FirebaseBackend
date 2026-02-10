@@ -19,6 +19,7 @@ const REVIEW_PAGE_SIZE = 9;
 
 export default function AdminDashboard() {
 
+
   /* =========================
      STATE
   ========================= */
@@ -35,28 +36,6 @@ export default function AdminDashboard() {
   const [auditSearch, setAuditSearch] = useState("");
 
   const [reviewPage, setReviewPage] = useState(1);
-
-  /* =========================
-     AUTH GUARD
-  ========================= */
-
-  useEffect(() => {
-    return onAuthStateChanged(auth, async u => {
-      if (!u) {
-        window.location.href = "/login";
-        return;
-      }
-
-      const token = await u.getIdTokenResult();
-      if (!token.claims.admin) {
-        alert("Admin only");
-        window.location.href = "/";
-        return;
-      }
-
-      loadAll();
-    });
-  }, []);
 
   /* =========================
      LOADERS
@@ -113,6 +92,28 @@ export default function AdminDashboard() {
     rows.sort((a, b) => a.date.localeCompare(b.date));
     setDailyTrend(rows);
   }
+
+  /* =========================
+     AUTH GUARD
+  ========================= */
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, async u => {
+      if (!u) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const token = await u.getIdTokenResult();
+      if (!token.claims.admin) {
+        alert("Admin only");
+        window.location.href = "/";
+        return;
+      }
+
+      loadAll();
+    });
+  }, []);
 
   /* =========================
      SAFE AUTO REFRESH
@@ -197,9 +198,7 @@ export default function AdminDashboard() {
     reviewPage * REVIEW_PAGE_SIZE
   );
 
-  useEffect(() => {
-    setReviewPage(1);
-  }, [reviewSearch, reviewMinRating]);
+
 
   /* =========================
      STATS
@@ -315,13 +314,19 @@ export default function AdminDashboard() {
             className="filter-select"
             placeholder="🔍 Search text"
             value={reviewSearch}
-            onChange={e => setReviewSearch(e.target.value)}
+            onChange={e => {
+              setReviewSearch(e.target.value);
+              setReviewPage(1);
+            }}
           />
 
           <select
             className="filter-select"
             value={reviewMinRating}
-            onChange={e => setReviewMinRating(Number(e.target.value))}
+            onChange={e => {
+              setReviewMinRating(Number(e.target.value));
+              setReviewPage(1);
+            }}
           >
             <option value={0}>All Ratings</option>
             <option value={5}>⭐⭐⭐⭐⭐</option>
