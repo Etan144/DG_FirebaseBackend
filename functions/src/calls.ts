@@ -132,13 +132,16 @@ export const getCallHistory = functions.https.onCall(
         const otherUserId = call.caller_user_id === userId ?
           call.callee_user_id : call.caller_user_id;
 
+        const calleeId = call.callee_user_id;
+
         return {
+          ...call, // preserve any dynamic detection fields
           id: call.id,
           caller_user_id: call.caller_user_id,
           callee_user_id: call.callee_user_id,
-          created_at: timestampToSeconds(call.created_at), // FIXED: Return as seconds (number)
-          ended_at: timestampToSeconds(call.ended_at), // FIXED: Return as seconds (number)
-          updated_at: timestampToSeconds(call.updated_at), // Fallback timestamp
+          created_at: timestampToSeconds(call.created_at),
+          ended_at: timestampToSeconds(call.ended_at),
+          updated_at: timestampToSeconds(call.updated_at),
           status: call.status,
           duration: call.duration,
           is_caller: call.caller_user_id === userId,
@@ -149,19 +152,20 @@ export const getCallHistory = functions.https.onCall(
             }),
             phoneNumber: phoneMap.get(otherUserId) ?? null,
           },
-          // Include detection fields from the original call document (old + new)
-          [`${call.callee_user_id}_highest_detection_score`]:
-            call[`${call.callee_user_id}_highest_detection_score`],
-          [`${call.callee_user_id}_highest_detection_timestamp`]:
-            call[`${call.callee_user_id}_highest_detection_timestamp`],
-          [`${call.callee_user_id}_highest_is_deepfake`]:
-            call[`${call.callee_user_id}_highest_is_deepfake`],
-          [`${call.callee_user_id}_detection_score`]:
-            call[`${call.callee_user_id}_detection_score`],
-          [`${call.callee_user_id}_detection_timestamp`]:
-            call[`${call.callee_user_id}_detection_timestamp`],
-          [`${call.callee_user_id}_is_deepfake`]:
-            call[`${call.callee_user_id}_is_deepfake`],
+          ...(calleeId ? {
+            [`${calleeId}_highest_detection_score`]:
+              call[`${calleeId}_highest_detection_score`],
+            [`${calleeId}_highest_detection_timestamp`]:
+              call[`${calleeId}_highest_detection_timestamp`],
+            [`${calleeId}_highest_is_deepfake`]:
+              call[`${calleeId}_highest_is_deepfake`],
+            [`${calleeId}_detection_score`]:
+              call[`${calleeId}_detection_score`],
+            [`${calleeId}_detection_timestamp`]:
+              call[`${calleeId}_detection_timestamp`],
+            [`${calleeId}_is_deepfake`]:
+              call[`${calleeId}_is_deepfake`],
+          } : {}),
         };
       });
 
@@ -171,7 +175,7 @@ export const getCallHistory = functions.https.onCall(
         calls: enrichedCalls,
         hasMore: enrichedCalls.length === limit,
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching call history:", error);
       console.error("Error details:", error instanceof Error ? error.message : error);
       console.error("Error stack:", error instanceof Error ? error.stack : "");
