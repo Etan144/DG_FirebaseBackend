@@ -22,7 +22,7 @@ export {
   fixAdminUsername,
 } from "./auth";
 export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
-export {getCallHistory, endCall} from "./calls";
+export {getCallHistory, endCall, flagCallerOnCallEnd} from "./calls";
 
 
 // Start writing functions

@@ -132,7 +132,28 @@ export const getCallHistory = functions.https.onCall(
         const otherUserId = call.caller_user_id === userId ?
           call.callee_user_id : call.caller_user_id;
 
+        const callerId = call.caller_user_id;
         const calleeId = call.callee_user_id;
+
+        const pick = (uid: string, key: string) => call[`${uid}_${key}`];
+
+        const highestScore =
+          (callerId ? pick(callerId, "highest_detection_score") : undefined) ??
+          (callerId ? pick(callerId, "detection_score") : undefined) ??
+          (calleeId ? pick(calleeId, "highest_detection_score") : undefined) ??
+          (calleeId ? pick(calleeId, "detection_score") : undefined);
+
+        const highestTimestamp =
+          (callerId ? pick(callerId, "highest_detection_timestamp") : undefined) ??
+          (callerId ? pick(callerId, "detection_timestamp") : undefined) ??
+          (calleeId ? pick(calleeId, "highest_detection_timestamp") : undefined) ??
+          (calleeId ? pick(calleeId, "detection_timestamp") : undefined);
+
+        const highestIsDeepfake =
+          (callerId ? pick(callerId, "highest_is_deepfake") : undefined) ??
+          (callerId ? pick(callerId, "is_deepfake") : undefined) ??
+          (calleeId ? pick(calleeId, "highest_is_deepfake") : undefined) ??
+          (calleeId ? pick(calleeId, "is_deepfake") : undefined);
 
         return {
           ...call, // preserve any dynamic detection fields
@@ -152,19 +173,18 @@ export const getCallHistory = functions.https.onCall(
             }),
             phoneNumber: phoneMap.get(otherUserId) ?? null,
           },
-          ...(calleeId ? {
-            [`${calleeId}_highest_detection_score`]:
-              call[`${calleeId}_highest_detection_score`],
-            [`${calleeId}_highest_detection_timestamp`]:
-              call[`${calleeId}_highest_detection_timestamp`],
-            [`${calleeId}_highest_is_deepfake`]:
-              call[`${calleeId}_highest_is_deepfake`],
-            [`${calleeId}_detection_score`]:
-              call[`${calleeId}_detection_score`],
-            [`${calleeId}_detection_timestamp`]:
-              call[`${calleeId}_detection_timestamp`],
-            [`${calleeId}_is_deepfake`]:
-              call[`${calleeId}_is_deepfake`],
+          ...(callerId ? {
+            [`${callerId}_highest_detection_score`]: highestScore,
+            [`${callerId}_highest_detection_timestamp`]: highestTimestamp,
+            [`${callerId}_highest_is_deepfake`]: highestIsDeepfake,
+          } : {}),
+          ...(callerId ? {
+            [`${callerId}_detection_score`]:
+              call[`${callerId}_detection_score`],
+            [`${callerId}_detection_timestamp`]:
+              call[`${callerId}_detection_timestamp`],
+            [`${callerId}_is_deepfake`]:
+              call[`${callerId}_is_deepfake`],
           } : {}),
         };
       });
@@ -244,3 +264,65 @@ export const endCall = functions.https.onCall(
     }
   }
 );
+
+/**
+ * Flag caller in global_blocked when a call ends with deepfake detection
+ */
+export const flagCallerOnCallEnd = functions.firestore
+  .document("calls/{callId}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+
+    if (!before || !after) return null;
+
+    const callerId = after.caller_user_id as string | undefined;
+    const calleeId = after.callee_user_id as string | undefined;
+    if (!callerId) return null;
+
+    // Only act once call is ended
+    if (after.status !== "ended") return null;
+
+    const callerKey = `${callerId}_highest_is_deepfake`;
+    const calleeKey = calleeId ? `${calleeId}_highest_is_deepfake` : null;
+
+    const afterCallerDeepfake = Boolean(after[callerKey]);
+    const afterCalleeDeepfake = calleeKey ? Boolean(after[calleeKey]) : false;
+    const afterIsDeepfake = afterCallerDeepfake || afterCalleeDeepfake;
+
+    const beforeCallerDeepfake = Boolean(before[callerKey]);
+    const beforeCalleeDeepfake = calleeKey ? Boolean(before[calleeKey]) : false;
+    const beforeIsDeepfake = beforeCallerDeepfake || beforeCalleeDeepfake;
+
+    // Trigger when: status just ended OR deepfake just became true
+    const statusJustEnded = before.status !== "ended" && after.status === "ended";
+    const deepfakeJustBecameTrue = !beforeIsDeepfake && afterIsDeepfake;
+
+    if (!afterIsDeepfake || (!statusJustEnded && !deepfakeJustBecameTrue)) {
+      return null;
+    }
+
+    const blockedRef = db.collection("global_blocked").doc(callerId);
+
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(blockedRef);
+      const existingLabel = (snap.get("label") as string | undefined) || "";
+      if (existingLabel.toLowerCase() === "blacklisted") {
+        return;
+      }
+
+      tx.set(
+        blockedRef,
+        {
+          userId: callerId,
+          label: "flag",
+          flaggedAt: admin.firestore.FieldValue.serverTimestamp(),
+          flaggedBy: "system",
+          lastCallId: context.params.callId,
+        },
+        {merge: true}
+      );
+    });
+
+    return null;
+  });
