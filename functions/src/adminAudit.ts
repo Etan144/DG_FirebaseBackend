@@ -28,7 +28,11 @@ export const getAuditLogs = functions.https.onCall(
 
     return snap.docs.map((d) => ({
       id: d.id,
-      ...d.data(),
+      action: d.get("action"),
+      actor: d.get("actorEmail") ?? d.get("actorUid"),
+      target: `${d.get("targetType")}: ${d.get("targetId")}`,
+      timestamp: d.get("createdAt"),
+      details: d.get("metadata") ?? {},
     }));
-  },
+  }
 );

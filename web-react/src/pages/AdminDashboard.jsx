@@ -141,7 +141,7 @@ export default function AdminDashboard() {
 
   async function deleteReview(id) {
     if (!confirm("Delete review?")) return;
-    const fn = httpsCallable(functions, "deleteReview");
+    const fn = httpsCallable(functions, "adminDeleteReview");
     await fn({ reviewId: id });
     await loadReviews();
     await loadAudit();

@@ -45,15 +45,23 @@ export const listUsers = functions.https.onCall(async (_data, context) => {
 
   const result = await admin.auth().listUsers(50);
 
-  return result.users.map((u) => ({
-    uid: u.uid,
-    email: u.email,
-    disabled: u.disabled,
-    displayName: u.displayName || "",
-    photoURL: u.photoURL || "",
-    creationTime: u.metadata.creationTime,
-    lastSignInTime: u.metadata.lastSignInTime,
+  const userList = result.users.map((user) => ({
+    uid: user.uid,
+    email: user.email || "",
+    displayName: user.displayName || "",
+    photoURL: user.photoURL || "",
+    phoneNumber: user.phoneNumber || "",
+    providerData: user.providerData || [],
+    emailVerified: user.emailVerified,
+    disabled: user.disabled ?? false, // Always include this
+    creationTime: user.metadata.creationTime,
+    lastSignInTime: user.metadata.lastSignInTime,
+    customClaims: user.customClaims || {},
+    multiFactor: user.multiFactor || {},
+    tenantId: user.tenantId || null,
+    tokensValidAfterTime: user.tokensValidAfterTime || null,
   }));
+  return userList;
 });
 
 /**

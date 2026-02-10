@@ -32,7 +32,7 @@ async function writeAudit(
 /**
  * Admin-only function to delete a review document.
  */
-export const deleteReview = functions.https.onCall(async (data, context) => {
+export const deleteReviewAdmin = functions.https.onCall(async (data, context) => {
   if (!context.auth || !context.auth.token.admin) {
     throw new functions.https.HttpsError(
       "permission-denied",
@@ -47,6 +47,19 @@ export const deleteReview = functions.https.onCall(async (data, context) => {
       "invalid-argument",
       "Missing reviewId"
     );
+  }
+
+  // Logging for debugging
+  const doc = await admin.firestore().collection("reviews").doc(reviewId).get();
+  console.log(
+    "deleteReviewAdmin called. reviewId:", reviewId,
+    "doc.exists:", doc.exists,
+    "actorUid:", context.auth?.uid,
+    "admin:", context.auth?.token?.admin
+  );
+
+  if (!doc.exists) {
+    throw new functions.https.HttpsError("not-found", "Review not found");
   }
 
   await admin.firestore()

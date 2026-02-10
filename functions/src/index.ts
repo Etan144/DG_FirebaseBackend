@@ -24,7 +24,7 @@ export {
 export {addReview, getReviews, getReviewStats, deleteReview, getFiveStarReviews} from "./reviews";
 export {getCallHistory, endCall} from "./calls";
 export {listUsers, setUserDisabled, deleteUser} from "./adminUsers";
-export {deleteReview as adminDeleteReview} from "./adminReviews";
+export {deleteReviewAdmin as adminDeleteReview} from "./adminReviews";
 export {recomputeStatsDaily, recomputeStatsNow} from "./stats";
 export * from "./adminAudit";
 
