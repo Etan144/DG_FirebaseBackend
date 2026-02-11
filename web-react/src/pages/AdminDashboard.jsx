@@ -1,3 +1,32 @@
+// Helper to map target string to username/email if possible
+function renderTarget(target, users) {
+  if (!target) return "";
+  // Example: "USER:7baZxr7TFRS1c5h7ZFGlKKg6N2G2" or "REVIEW:IuaKzBPo57XbAksRcmCZ"
+  const [type, id] = target.split(":");
+  if (type === "USER" && id) {
+    const user = users.find(u => u.uid === id);
+    if (user) return `${type}: ${user.email || user.username || id}`;
+  }
+  return target;
+}
+// Helper to robustly format Firestore/JS timestamps
+function formatTimestamp(ts) {
+  if (!ts) return "";
+  if (typeof ts === "object" && ts.seconds !== undefined) {
+    return new Date(ts.seconds * 1000).toLocaleString();
+  }
+  if (typeof ts === "number") {
+    return new Date(ts).toLocaleString();
+  }
+  if (typeof ts === "string") {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? ts : d.toLocaleString();
+  }
+  if (ts instanceof Date) {
+    return ts.toLocaleString();
+  }
+  return "";
+}
 import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
@@ -14,6 +43,8 @@ import UserRow from "../components/admin/UserRow";
 import ReviewCard from "../components/admin/ReviewCard";
 import DetectionTrendChart from "../components/admin/DetectionTrendChart";
 import PerformancePanel from "../components/admin/PerformancePanel";
+import DetectionScoreHistogram from "../components/admin/DetectionScoreHistogram";
+import DeepfakePieChart from "../components/admin/DeepfakePieChart";
 
 const REVIEW_PAGE_SIZE = 9;
 
@@ -29,6 +60,10 @@ export default function AdminDashboard() {
   const [audit, setAudit] = useState([]);
   const [aggStats, setAggStats] = useState(null);
   const [dailyTrend, setDailyTrend] = useState([]);
+
+  // New state for calls analytics
+  const [callScores, setCallScores] = useState([]);
+  const [deepfakeCounts, setDeepfakeCounts] = useState({ real: 0, deepfake: 0 });
 
   const [userSearch, setUserSearch] = useState("");
   const [reviewSearch, setReviewSearch] = useState("");
@@ -47,8 +82,36 @@ export default function AdminDashboard() {
       loadReviews(),
       loadAudit(),
       loadAggStats(),
-      loadDailyTrend()
+      loadDailyTrend(),
+      loadCallsAnalytics()
     ]);
+  }
+  // Load detection scores and deepfake counts from calls collection
+  async function loadCallsAnalytics() {
+    const snap = await getDocs(collection(db, "calls"));
+    const scores = [];
+    let real = 0, deepfake = 0;
+    snap.forEach(docSnap => {
+      const d = docSnap.data();
+      // Find detection_score and is_deepfake fields
+      // Support both flat and nested field names
+      let score = d.detection_score;
+      let isDeepfake = d.is_deepfake;
+      // If not present, try to find by searching keys
+      if (score === undefined || isDeepfake === undefined) {
+        for (const k of Object.keys(d)) {
+          if (k.endsWith("_detection_score")) score = d[k];
+          if (k.endsWith("_is_deepfake")) isDeepfake = d[k];
+        }
+      }
+      if (typeof score === "number") scores.push(score);
+      if (typeof isDeepfake === "boolean") {
+        if (isDeepfake) deepfake++;
+        else real++;
+      }
+    });
+    setCallScores(scores);
+    setDeepfakeCounts({ real, deepfake });
   }
 
   async function loadUsers() {
@@ -256,11 +319,18 @@ export default function AdminDashboard() {
           <StatCard label="Total Scans" value={aggStats?.total_scans ?? "—"} />
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <button className="btn" onClick={recomputeStats}>
-            Recompute Detection Stats
-          </button>
-        </div>
+        {/* Detection Analytics Charts */}
+        <section className="section" style={{ marginTop: 32 }}>
+          <div className="grid" style={{ gap: 32 }}>
+            <DetectionScoreHistogram scores={callScores} />
+            <DeepfakePieChart counts={deepfakeCounts} />
+          </div>
+          <div style={{ paddingTop: 40, textAlign: 'center' }}>
+            <button className="btn" onClick={recomputeStats}>
+              Recompute Detection Stats
+            </button>
+          </div>
+        </section>
       </section>
 
       {/* ===== PERFORMANCE PANEL ===== */}
@@ -384,15 +454,11 @@ export default function AdminDashboard() {
           <tbody>
             {filteredAudit.map(a => (
               <tr key={a.id}>
-                <td>
-                  {a.createdAt?.seconds
-                    ? new Date(a.createdAt.seconds * 1000).toLocaleString()
-                    : ""}
-                </td>
-                <td>{a.actorEmail || a.actorUid}</td>
+                <td>{typeof a.timestamp === 'number' ? new Date(a.timestamp).toLocaleString() : (a.timestamp || "-")}</td>
+                <td>{a.actor}</td>
                 <td>{a.action}</td>
-                <td>{a.targetType}:{a.targetId}</td>
-                <td>{a.metadata ? JSON.stringify(a.metadata) : ""}</td>
+                <td>{renderTarget(a.target, users)}</td>
+                <td>{a.details && Object.keys(a.details).length > 0 ? JSON.stringify(a.details) : ""}</td>
               </tr>
             ))}
           </tbody>

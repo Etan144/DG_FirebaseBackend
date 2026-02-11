@@ -31,7 +31,7 @@ export const getAuditLogs = functions.https.onCall(
       action: d.get("action"),
       actor: d.get("actorEmail") ?? d.get("actorUid"),
       target: `${d.get("targetType")}: ${d.get("targetId")}`,
-      timestamp: d.get("createdAt"),
+      timestamp: (d.get("createdAt") && typeof d.get("createdAt").toMillis === "function") ? d.get("createdAt").toMillis() : d.get("createdAt") || null,
       details: d.get("metadata") ?? {},
     }));
   }
