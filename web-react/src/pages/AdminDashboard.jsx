@@ -1,31 +1,23 @@
-// Helper to map target string to username/email if possible
-function renderTarget(target, users) {
+// Helper to map target string to displayName/username/email from public_users or Auth
+function renderTarget(target, users, publicUsers) {
   if (!target) return "";
-  // Example: "USER:7baZxr7TFRS1c5h7ZFGlKKg6N2G2" or "REVIEW:IuaKzBPo57XbAksRcmCZ"
   const [type, id] = target.split(":");
   if (type === "USER" && id) {
+    // Try public_users first
+    const pub = publicUsers.find(u => u.id === id);
+    if (pub) {
+      if (pub.displayName) return `${type}: ${pub.displayName}`;
+      if (pub.username) return `${type}: ${pub.username}`;
+    }
+    // Fallback to Auth users
     const user = users.find(u => u.uid === id);
-    if (user) return `${type}: ${user.email || user.username || id}`;
+    if (user) {
+      if (user.displayName) return `${type}: ${user.displayName}`;
+      if (user.email) return `${type}: ${user.email}`;
+    }
+    return `${type}: ${id}`;
   }
   return target;
-}
-// Helper to robustly format Firestore/JS timestamps
-function formatTimestamp(ts) {
-  if (!ts) return "";
-  if (typeof ts === "object" && ts.seconds !== undefined) {
-    return new Date(ts.seconds * 1000).toLocaleString();
-  }
-  if (typeof ts === "number") {
-    return new Date(ts).toLocaleString();
-  }
-  if (typeof ts === "string") {
-    const d = new Date(ts);
-    return isNaN(d.getTime()) ? ts : d.toLocaleString();
-  }
-  if (ts instanceof Date) {
-    return ts.toLocaleString();
-  }
-  return "";
 }
 import { useEffect, useMemo, useState } from "react";
 import Header from "../components/Header";
@@ -56,8 +48,16 @@ export default function AdminDashboard() {
   ========================= */
 
   const [users, setUsers] = useState([]);
+  const [publicUsers, setPublicUsers] = useState([]);
+    // Load public_users from Firestore
+    async function loadPublicUsers() {
+      const snap = await getDocs(collection(db, "public_users"));
+      setPublicUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
   const [reviews, setReviews] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const AUDIT_PAGE_SIZE = 10;
   const [aggStats, setAggStats] = useState(null);
   const [dailyTrend, setDailyTrend] = useState([]);
 
@@ -79,6 +79,7 @@ export default function AdminDashboard() {
   async function loadAll() {
     await Promise.all([
       loadUsers(),
+      loadPublicUsers(),
       loadReviews(),
       loadAudit(),
       loadAggStats(),
@@ -245,6 +246,12 @@ export default function AdminDashboard() {
       (a.targetId || "").toLowerCase().includes(auditSearch.toLowerCase())
     ),
     [audit, auditSearch]
+  );
+
+  const totalAuditPages = Math.max(1, Math.ceil(filteredAudit.length / AUDIT_PAGE_SIZE));
+  const pagedAudit = filteredAudit.slice(
+    (auditPage - 1) * AUDIT_PAGE_SIZE,
+    auditPage * AUDIT_PAGE_SIZE
   );
 
   /* =========================
@@ -450,19 +457,30 @@ export default function AdminDashboard() {
               <th>Details</th>
             </tr>
           </thead>
-
           <tbody>
-            {filteredAudit.map(a => (
+            {pagedAudit.map(a => (
               <tr key={a.id}>
                 <td>{typeof a.timestamp === 'number' ? new Date(a.timestamp).toLocaleString() : (a.timestamp || "-")}</td>
                 <td>{a.actor}</td>
                 <td>{a.action}</td>
-                <td>{renderTarget(a.target, users)}</td>
+                <td>{renderTarget(a.target, users, publicUsers)}</td>
                 <td>{a.details && Object.keys(a.details).length > 0 ? JSON.stringify(a.details) : ""}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="reviews-actions" style={{ marginTop: 12 }}>
+          <button className="btn" disabled={auditPage === 1}
+            onClick={() => setAuditPage(p => p - 1)}>
+            Prev
+          </button>
+          <span>{auditPage} / {totalAuditPages}</span>
+          <button className="btn"
+            disabled={auditPage === totalAuditPages}
+            onClick={() => setAuditPage(p => p + 1)}>
+            Next
+          </button>
+        </div>
       </section>
 
       <Footer />
