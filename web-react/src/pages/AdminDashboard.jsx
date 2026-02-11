@@ -1,35 +1,11 @@
-// Helper to map target string to displayName/username/email from public_users or Auth
-function renderTarget(target, users, publicUsers) {
-  if (!target) return "";
-  const [type, id] = target.split(":");
-  if (type === "USER" && id) {
-    // Try public_users first
-    const pub = publicUsers.find(u => u.id === id);
-    if (pub) {
-      if (pub.displayName) return `${type}: ${pub.displayName}`;
-      if (pub.username) return `${type}: ${pub.username}`;
-    }
-    // Fallback to Auth users
-    const user = users.find(u => u.uid === id);
-    if (user) {
-      if (user.displayName) return `${type}: ${user.displayName}`;
-      if (user.email) return `${type}: ${user.email}`;
-    }
-    return `${type}: ${id}`;
-  }
-  return target;
-}
 import { useEffect, useMemo, useState } from "react";
+import { collection, getDoc, getDocs, doc } from "firebase/firestore";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import "../styles/admin-dashboard.css";
-
 import { auth, functions, db } from "../firebase";
-
 import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-
 import StatCard from "../components/admin/StatCard";
 import UserRow from "../components/admin/UserRow";
 import ReviewCard from "../components/admin/ReviewCard";
@@ -37,6 +13,60 @@ import DetectionTrendChart from "../components/admin/DetectionTrendChart";
 import PerformancePanel from "../components/admin/PerformancePanel";
 import DetectionScoreHistogram from "../components/admin/DetectionScoreHistogram";
 import DeepfakePieChart from "../components/admin/DeepfakePieChart";
+
+// Helper to map target string to displayName/username/email from public_users or Auth, with debug logging
+function renderTarget(target, users, publicUsers, reviewsMap, publicUsersMap, usersCollectionMap) {
+  if (!target) return "";
+  const [type, idRaw] = target.split(":");
+  const id = idRaw ? idRaw.trim() : idRaw;
+  if (type === "USER" && id) {
+    const pub = publicUsersMap[id];
+    if (pub) {
+      if (pub.displayName) return `${type}: ${pub.displayName} (${id})`;
+      if (pub.username) return `${type}: ${pub.username} (${id})`;
+    }
+    const userDoc = usersCollectionMap[id];
+    if (userDoc) {
+      if (userDoc.displayName) return `${type}: ${userDoc.displayName} (${id})`;
+      if (userDoc.username) return `${type}: ${userDoc.username} (${id})`;
+    }
+    const user = users.find(u => (u.uid && typeof u.uid === 'string' ? u.uid.trim() : u.uid) === id);
+    if (user) {
+      if (user.displayName) return `${type}: ${user.displayName} (${id})`;
+      if (user.email) return `${type}: ${user.email} (${id})`;
+    }
+    // Only log if this is actually being rendered in the UI
+    if (typeof window !== 'undefined' && window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
+      console.warn(`DEBUG: USER target not mapped for UID: ${id}`);
+    }
+    return `${type}: ${id}`;
+  }
+  if (type === "REVIEW" && id) {
+    const review = reviewsMap[id];
+    if (review) {
+      const userId = review.userId ? (typeof review.userId === 'string' ? review.userId.trim() : review.userId) : review.userId;
+      const pub = publicUsersMap[userId];
+      if (pub) {
+        if (pub.displayName) return `${type}: ${pub.displayName} (${id})`;
+        if (pub.username) return `${type}: ${pub.username} (${id})`;
+      }
+      const userDoc = usersCollectionMap[userId];
+      if (userDoc) {
+        if (userDoc.displayName) return `${type}: ${userDoc.displayName} (${id})`;
+        if (userDoc.username) return `${type}: ${userDoc.username} (${id})`;
+      }
+      if (typeof window !== 'undefined' && window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
+        console.warn(`DEBUG: REVIEW target mapped to userId ${userId}, but no public user found.`);
+      }
+      return `${type}: ${userId}`;
+    }
+    if (typeof window !== 'undefined' && window.__REACT_DEVTOOLS_GLOBAL_HOOK__) {
+      console.warn(`DEBUG: REVIEW target not mapped for reviewId: ${id}`);
+    }
+    return `${type}: ${id}`;
+  }
+  return target;
+}
 
 const REVIEW_PAGE_SIZE = 9;
 
@@ -49,12 +79,21 @@ export default function AdminDashboard() {
 
   const [users, setUsers] = useState([]);
   const [publicUsers, setPublicUsers] = useState([]);
+  const [usersCollection, setUsersCollection] = useState([]);
     // Load public_users from Firestore
     async function loadPublicUsers() {
       const snap = await getDocs(collection(db, "public_users"));
       setPublicUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }
+    async function loadUsersCollection() {
+      const snap = await getDocs(collection(db, "users"));
+      setUsersCollection(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }
   const [reviews, setReviews] = useState([]);
+  // For fast lookup
+  const reviewsMap = useMemo(() => Object.fromEntries(reviews.map(r => [r.id, r])), [reviews]);
+const publicUsersMap = useMemo(() => Object.fromEntries(publicUsers.map(u => [u.id && typeof u.id === 'string' ? u.id.trim() : u.id, u])), [publicUsers]);
+const usersCollectionMap = useMemo(() => Object.fromEntries(usersCollection.map(u => [u.id && typeof u.id === 'string' ? u.id.trim() : u.id, u])), [usersCollection]);
   const [audit, setAudit] = useState([]);
   const [auditPage, setAuditPage] = useState(1);
   const AUDIT_PAGE_SIZE = 10;
@@ -80,6 +119,7 @@ export default function AdminDashboard() {
     await Promise.all([
       loadUsers(),
       loadPublicUsers(),
+      loadUsersCollection(),
       loadReviews(),
       loadAudit(),
       loadAggStats(),
@@ -463,7 +503,7 @@ export default function AdminDashboard() {
                 <td>{typeof a.timestamp === 'number' ? new Date(a.timestamp).toLocaleString() : (a.timestamp || "-")}</td>
                 <td>{a.actor}</td>
                 <td>{a.action}</td>
-                <td>{renderTarget(a.target, users, publicUsers)}</td>
+                <td>{renderTarget(a.target, users, publicUsers, reviewsMap, publicUsersMap, usersCollectionMap)}</td>
                 <td>{a.details && Object.keys(a.details).length > 0 ? JSON.stringify(a.details) : ""}</td>
               </tr>
             ))}
