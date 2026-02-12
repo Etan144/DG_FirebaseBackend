@@ -189,18 +189,9 @@ export default function Home() {
           </div>
 
           <div className="card">
-            <h3>Admin & analytics</h3>
-            <p>
-              Dashboards for teams: incident timelines, per-call risk, and
-              opt-in telemetry to refine models per region.
-            </p>
-          </div>
-
-          <div className="card">
             <h3>Privacy-first</h3>
             <p>
-              Data stays on-device by default. Opt-in cloud sync for
-              enterprises, compliant with PDPA.
+              Data stays on-device by default.
             </p>
           </div>
 

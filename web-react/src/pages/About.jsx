@@ -11,37 +11,42 @@ const teamMembers = [
   {
     name: "Ng Jing Xiang, Zavier",
     role: "Project Leader",
+    degree: "BSc Computer Science(Cybersecurity)",
     photo: zavierPhoto,
     email: "jxzhn985@uowmail.edu.au",
-    bio: "Short bio here"
+    bio: "-"
   },
   {
     name: "Tan Yi Heng Eugene",
     role: "Full-Stack Developer",
+    degree: "BSc Computer Science(Big Data)",
     photo: eugenePhoto,
     email: "eugene@email.com",
-    bio: "Short bio here"
+    bio: "-"
   },
   {
     name: "Lawrence Cheo Chee Wei",
     role: "Full-Stack Developer",
+    degree: "BSc Business Information Systems",
     photo: lawrencePhoto,
     email: "lcwc907@uowmail.edu.au",
-    bio: "Short bio here"
+    bio: "67"
   },
   {
     name: "Lee Donghyun",
     role: "Full-Stack Developer",
+    degree: "BSc Computer Science(Big Data)",
     photo: dongHyunPhoto,
     email: "dl668@uowmail.edu.au",
-    bio: "Short bio here"
+    bio: "-"
   },
   {
     name: "See Yu",
     role: "Full-Stack Developer",
+    degree: "BSc Computer Science(Big Data)",
     photo: seeyuPhoto,
     email: "ys549@uowmal.edu.au",
-    bio: "Short bio here"
+    bio: "-"
   }
 ];
 

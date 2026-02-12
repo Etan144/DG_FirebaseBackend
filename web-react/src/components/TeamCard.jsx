@@ -14,9 +14,16 @@ export default function TeamCard({ member }) {
 
       <h3>{member.name}</h3>
 
+
       <div className="team-role">
         {member.role}
       </div>
+
+      {member.degree && (
+        <div className="team-degree">
+          {member.degree}
+        </div>
+      )}
 
       <p>{member.bio}</p>
 
