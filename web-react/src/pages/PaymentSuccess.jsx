@@ -10,24 +10,25 @@ export default function PaymentSuccess() {
 
       <Header />
 
-      <section className="section" style={{ textAlign: "center" }}>
+      <section className="section" style={{ textAlign: "center", display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <h2>Payment Successful 🎉</h2>
 
         <p className="lead" style={{ marginTop: 12 }}>
-          Your Pro subscription is now active.
+          Your Pro access is now active.
         </p>
 
-        <div className="card" style={{ marginTop: 24 }}>
+        <div className="card" style={{ marginTop: 24, maxWidth: '400px', width: '100%' }}>
           <h3>What happens next?</h3>
           <p>
-            You now have access to advanced detection scoring,
-            analytics, and priority model updates.
+            You now have lifetime access to the Deepfake Guard application. 
+            Download the app below to get started with advanced detection and real-time protection.
           </p>
         </div>
 
-        <div style={{ marginTop: 28, display: "flex", gap: 12, justifyContent: "center" }}>
+        <div style={{ marginTop: 28, display: "flex", gap: 12, justifyContent: "center", width: '100%', maxWidth: '400px' }}>
           <button
             className="btn primary"
+            style={{ flex: 1 }}
             onClick={() => navigate("/download")}
           >
             Go to Download
@@ -35,9 +36,10 @@ export default function PaymentSuccess() {
 
           <button
             className="btn"
-            onClick={() => navigate("/#subscription")}
+            style={{ flex: 1 }}
+            onClick={() => navigate("/")}
           >
-            Back to Pricing
+            Back to Home
           </button>
         </div>
 
