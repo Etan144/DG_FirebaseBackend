@@ -25,20 +25,55 @@ function todayId(): string {
 async function recomputeStats(): Promise<void> {
   const snap = await db.collection("calls").get();
 
-  const scores: number[] = [];
-  let deepfakeCount = 0;
-  let total = 0;
+  // Map to store highest values per caller_user_id
+  const userStats: Record<string, {
+    highest_detection_score?: number;
+    highest_is_deepfake?: boolean;
+    is_deepfake?: boolean;
+  }> = {};
 
   snap.forEach((doc) => {
     const data = doc.data();
-
+    // For each key, check if it matches the pattern for a caller_user_id attribute
     for (const [k, v] of Object.entries(data)) {
-      if (k.endsWith("_detection_score") && typeof v === "number") {
-        scores.push(v);
-        total++;
+      // Example: 1szB7XJ4koPOhbFnCWhTVltAudP2_highest_detection_score
+      const match = k.match(/^([A-Za-z0-9]+)_highest_detection_score$/);
+      if (match && typeof v === "number") {
+        const userId = match[1];
+        if (!userStats[userId]) userStats[userId] = {};
+        const prevScore = userStats[userId]?.highest_detection_score;
+        if (prevScore === undefined || v > prevScore) {
+          userStats[userId].highest_detection_score = v;
+        }
       }
+      const matchDeepfake = k.match(/^([A-Za-z0-9]+)_highest_is_deepfake$/);
+      if (matchDeepfake && typeof v === "boolean") {
+        const userId = matchDeepfake[1];
+        if (!userStats[userId]) userStats[userId] = {};
+        userStats[userId].highest_is_deepfake = v;
+      }
+      const matchIsDeepfake = k.match(/^([A-Za-z0-9]+)_is_deepfake$/);
+      if (matchIsDeepfake && typeof v === "boolean") {
+        const userId = matchIsDeepfake[1];
+        if (!userStats[userId]) userStats[userId] = {};
+        userStats[userId].is_deepfake = v;
+      }
+    }
+  });
 
-      if (k.endsWith("_is_deepfake") && v === true) {
+  // Aggregate metrics
+  const scores: number[] = [];
+  let deepfakeCount = 0;
+  const total = snap.size; // total number of call documents
+  snap.forEach((doc) => {
+    const data = doc.data();
+    for (const [k, v] of Object.entries(data)) {
+      // caller_user_id_highest_detection_score
+      if (k.match(/^[A-Za-z0-9]+_highest_detection_score$/) && typeof v === "number") {
+        scores.push(v);
+      }
+      // caller_user_id_highest_is_deepfake
+      if (k.match(/^[A-Za-z0-9]+_highest_is_deepfake$/) && typeof v === "boolean" && v === true) {
         deepfakeCount++;
       }
     }
