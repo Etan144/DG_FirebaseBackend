@@ -42,7 +42,7 @@ export default function Home() {
       <section className="hero" id="product">
         <div>
           <div className="eyebrow">
-            Telecom-ready | Privacy-first | On-device ML
+            VOIP-Based | Privacy-first | On-device ML
           </div>
 
           <h1>
@@ -60,10 +60,6 @@ export default function Home() {
             <Link className="btn primary" to="/download">
               Download the App
             </Link>
-
-            <a className="btn" href="#demo-video">
-              Talk to us
-            </a>
           </div>
 
           <div className="hero-meta">
@@ -339,28 +335,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ================= STATS ================= */}
-      <section className="section stats-banner">
-        <div className="stat-item">
-          <h3>99.8%</h3>
-          <p>Real-time detection accuracy</p>
-        </div>
-
-        <div className="stat-item">
-          <h3>&lt;100ms</h3>
-          <p>Average response time</p>
-        </div>
-
-        <div className="stat-item">
-          <h3>1M+</h3>
-          <p>Threats blocked daily</p>
-        </div>
-
-        <div className="stat-item">
-          <h3>24/7</h3>
-          <p>Monitoring and support</p>
-        </div>
-      </section>
 
       <ReviewSlider />
 
@@ -382,13 +356,6 @@ export default function Home() {
             <h4>What's the performance impact?</h4>
             <p>
               Optimized on-device inference keeps CPU under ~5% during calls.
-            </p>
-          </div>
-
-          <div className="faq-item">
-            <h4>Can it be integrated?</h4>
-            <p>
-              Yes — mobile SDK + APIs support carrier and enterprise deployments.
             </p>
           </div>
 

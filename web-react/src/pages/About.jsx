@@ -74,18 +74,8 @@ export default function About() {
 
         <div className="grid">
           <div className="card">
-            <h3>General Enquiries</h3>
-            <p>contact@deepfakeguard.example</p>
-          </div>
-
-          <div className="card">
-            <h3>Partnerships</h3>
-            <p>partners@deepfakeguard.example</p>
-          </div>
-
-          <div className="card">
-            <h3>Support</h3>
-            <p>support@deepfakeguard.example</p>
+            <h3>General Enquiries & Support</h3>
+            <p>dfguardmail@gmail.com</p>
           </div>
         </div>
       </section>
