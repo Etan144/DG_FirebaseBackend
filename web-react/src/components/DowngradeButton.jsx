@@ -20,7 +20,7 @@ export default function DowngradeButton() {
         "subscription.downgradedAt": new Date()
       });
 
-      alert("Plan changed to FREE ✅");
+      alert("Plan changed to FREE");
       window.location.reload(); // refresh plan state
 
     } catch (err) {

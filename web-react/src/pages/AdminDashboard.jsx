@@ -169,7 +169,6 @@ const usersCollectionMap = useMemo(() => Object.fromEntries(usersCollection.map(
     })));
   }
 
-  // ✅ UPDATED — now uses Cloud Function instead of direct Firestore
   async function loadAudit() {
     const fn = httpsCallable(functions, "getAuditLogs");
     const res = await fn({ limit: 200 });
