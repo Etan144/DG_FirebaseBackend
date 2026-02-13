@@ -146,7 +146,7 @@ export default function Home() {
 
         <div className="video-container">
           <video controls poster="/video-poster.jpg">
-            <source src="/demo-video.mp4" type="video/mp4" />
+            <source src="/MarketingVideo.mp4" type="video/mp4" />
           </video>
         </div>
       </section>
