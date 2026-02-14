@@ -133,27 +133,15 @@ export const getCallHistory = functions.https.onCall(
           call.callee_user_id : call.caller_user_id;
 
         const callerId = call.caller_user_id;
-        const calleeId = call.callee_user_id;
-
-        const pick = (uid: string, key: string) => call[`${uid}_${key}`];
 
         const highestScore =
-          (callerId ? pick(callerId, "highest_detection_score") : undefined) ??
-          (callerId ? pick(callerId, "detection_score") : undefined) ??
-          (calleeId ? pick(calleeId, "highest_detection_score") : undefined) ??
-          (calleeId ? pick(calleeId, "detection_score") : undefined);
+          callerId ? call[`${callerId}_highest_detection_score`] : undefined;
 
         const highestTimestamp =
-          (callerId ? pick(callerId, "highest_detection_timestamp") : undefined) ??
-          (callerId ? pick(callerId, "detection_timestamp") : undefined) ??
-          (calleeId ? pick(calleeId, "highest_detection_timestamp") : undefined) ??
-          (calleeId ? pick(calleeId, "detection_timestamp") : undefined);
+          callerId ? call[`${callerId}_highest_detection_timestamp`] : undefined;
 
         const highestIsDeepfake =
-          (callerId ? pick(callerId, "highest_is_deepfake") : undefined) ??
-          (callerId ? pick(callerId, "is_deepfake") : undefined) ??
-          (calleeId ? pick(calleeId, "highest_is_deepfake") : undefined) ??
-          (calleeId ? pick(calleeId, "is_deepfake") : undefined);
+          callerId ? call[`${callerId}_highest_is_deepfake`] : undefined;
 
         return {
           ...call, // preserve any dynamic detection fields
@@ -162,7 +150,7 @@ export const getCallHistory = functions.https.onCall(
           callee_user_id: call.callee_user_id,
           created_at: timestampToSeconds(call.created_at),
           ended_at: timestampToSeconds(call.ended_at),
-          updated_at: timestampToSeconds(call.updated_at),
+          updated_at: timestampToSeconds(call.updated_at ?? call.ended_at),
           status: call.status,
           duration: call.duration,
           is_caller: call.caller_user_id === userId,
@@ -177,14 +165,6 @@ export const getCallHistory = functions.https.onCall(
             [`${callerId}_highest_detection_score`]: highestScore,
             [`${callerId}_highest_detection_timestamp`]: highestTimestamp,
             [`${callerId}_highest_is_deepfake`]: highestIsDeepfake,
-          } : {}),
-          ...(callerId ? {
-            [`${callerId}_detection_score`]:
-              call[`${callerId}_detection_score`],
-            [`${callerId}_detection_timestamp`]:
-              call[`${callerId}_detection_timestamp`],
-            [`${callerId}_is_deepfake`]:
-              call[`${callerId}_is_deepfake`],
           } : {}),
         };
       });
