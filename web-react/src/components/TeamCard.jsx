@@ -30,7 +30,7 @@ export default function TeamCard({ member }) {
       <div className="team-links">
         {member.email && (
           <a href={`mailto:${member.email}`}>
-            Email
+            {member.email}
           </a>
         )}
       </div>

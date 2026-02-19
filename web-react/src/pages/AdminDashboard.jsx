@@ -242,6 +242,14 @@ const usersCollectionMap = useMemo(() => Object.fromEntries(usersCollection.map(
     await loadAudit();
   }
 
+  async function deleteUser(uid) {
+    if (!confirm("Delete this user permanently? This action cannot be undone.")) return;
+    const fn = httpsCallable(functions, "deleteUser");
+    await fn({ uid });
+    await loadUsers();
+    await loadAudit();
+  }
+
   async function deleteReview(id) {
     if (!confirm("Delete review?")) return;
     const fn = httpsCallable(functions, "adminDeleteReview");
@@ -415,7 +423,7 @@ const usersCollectionMap = useMemo(() => Object.fromEntries(usersCollection.map(
           </thead>
           <tbody>
             {filteredUsers.map(u => (
-              <UserRow key={u.uid} user={u} onToggle={setUserDisabled} />
+              <UserRow key={u.uid} user={u} onToggle={setUserDisabled} onDelete={deleteUser} />
             ))}
           </tbody>
         </table>

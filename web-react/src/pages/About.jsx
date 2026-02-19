@@ -13,40 +13,40 @@ const teamMembers = [
     role: "Project Leader",
     degree: "BSc Computer Science(Cybersecurity)",
     photo: zavierPhoto,
-    email: "jxzhn985@uowmail.edu.au",
-    bio: "-"
+    email: "zavierng1712@gmail.com",
+    bio: ""
   },
   {
     name: "Tan Yi Heng Eugene",
     role: "Full-Stack Developer",
     degree: "BSc Computer Science(Big Data)",
     photo: eugenePhoto,
-    email: "eugene@email.com",
-    bio: "-"
+    email: "eugenetan310101@gmail.com",
+    bio: ""
   },
   {
     name: "Lawrence Cheo Chee Wei",
     role: "Full-Stack Developer",
     degree: "BSc Business Information Systems",
     photo: lawrencePhoto,
-    email: "lcwc907@uowmail.edu.au",
-    bio: "67"
+    email: "lawrencecheo2908@gmail.com",
+    bio: ""
   },
   {
     name: "Lee Donghyun",
     role: "Full-Stack Developer",
     degree: "BSc Computer Science(Big Data)",
     photo: dongHyunPhoto,
-    email: "dl668@uowmail.edu.au",
-    bio: "-"
+    email: "wm07247@gmail.com",
+    bio: ""
   },
   {
     name: "See Yu",
     role: "Full-Stack Developer",
     degree: "BSc Computer Science(Big Data)",
     photo: seeyuPhoto,
-    email: "ys549@uowmal.edu.au",
-    bio: "-"
+    email: "seeyu44@gmail.com",
+    bio: ""
   }
 ];
 
@@ -80,7 +80,7 @@ export default function About() {
         <div className="grid">
           <div className="card">
             <h3>General Enquiries & Support</h3>
-            <p>dfguardmail@gmail.com</p>
+            <p><a href="mailto:dfguardmail@gmail.com">dfguardmail@gmail.com</a></p>
           </div>
         </div>
       </section>
