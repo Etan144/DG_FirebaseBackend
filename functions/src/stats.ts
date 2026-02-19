@@ -7,11 +7,14 @@ import {db} from "./firebase";
 ========================= */
 
 /**
- * Get YYYY-MM-DD id for today
+ * Get YYYY-MM-DD id for today in Singapore time (UTC+8)
  * @return {string}
  */
 function todayId(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  // Singapore is UTC+8
+  const sgTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+  return sgTime.toISOString().slice(0, 10);
 }
 
 /* =========================
@@ -106,10 +109,10 @@ async function recomputeStats(): Promise<void> {
 ========================= */
 
 /**
- * Scheduled daily recompute
+ * Scheduled daily recompute at 12:00 AM Singapore time (UTC+8)
  */
 export const recomputeStatsDaily = onSchedule(
-  "every 24 hours",
+  "0 16 * * *",
   async (): Promise<void> => {
     await recomputeStats();
   }
